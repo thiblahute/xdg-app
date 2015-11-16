@@ -1,0 +1,240 @@
+/* builder-manifest.c
+ *
+ * Copyright (C) 2015 Red Hat, Inc
+ *
+ * This file is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation; either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This file is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * Authors:
+ *       Alexander Larsson <alexl@redhat.com>
+ */
+
+#include "config.h"
+
+#include <string.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/statfs.h>
+
+#include "builder-manifest.h"
+
+struct BuilderManifest {
+  GObject parent;
+
+  char *app_id;
+  BuilderOptions *build_options;
+  GList *modules;
+};
+
+typedef struct {
+  GObjectClass parent_class;
+} BuilderManifestClass;
+
+static void serializable_iface_init (JsonSerializableIface *serializable_iface);
+
+G_DEFINE_TYPE_WITH_CODE (BuilderManifest, builder_manifest, G_TYPE_OBJECT,
+                         G_IMPLEMENT_INTERFACE (JSON_TYPE_SERIALIZABLE, serializable_iface_init));
+
+enum {
+  PROP_0,
+  PROP_APP_ID,
+  PROP_BUILD_OPTIONS,
+  PROP_MODULES,
+  LAST_PROP
+};
+
+
+static void
+builder_manifest_finalize (GObject *object)
+{
+  BuilderManifest *self = (BuilderManifest *)object;
+
+  g_free (self->app_id);
+  g_clear_object (&self->build_options);
+  g_list_free_full (self->modules, g_object_unref);
+
+  G_OBJECT_CLASS (builder_manifest_parent_class)->finalize (object);
+}
+
+static void
+builder_manifest_get_property (GObject    *object,
+                               guint       prop_id,
+                               GValue     *value,
+                               GParamSpec *pspec)
+{
+  BuilderManifest *self = BUILDER_MANIFEST(object);
+
+  switch (prop_id)
+    {
+    case PROP_APP_ID:
+      g_value_set_string (value, self->app_id);
+      break;
+
+    case PROP_BUILD_OPTIONS:
+      g_value_set_object (value, self->build_options);
+      break;
+
+    case PROP_MODULES:
+      g_value_set_pointer (value, self->modules);
+      break;
+
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+    }
+}
+
+static void
+builder_manifest_set_property (GObject       *object,
+                               guint         prop_id,
+                               const GValue *value,
+                               GParamSpec   *pspec)
+{
+  BuilderManifest *self = BUILDER_MANIFEST (object);
+
+  switch (prop_id)
+    {
+    case PROP_APP_ID:
+      g_free (self->app_id);
+      self->app_id = g_value_dup_string (value);
+      break;
+
+    case PROP_BUILD_OPTIONS:
+      g_set_object (&self->build_options,  g_value_get_object (value));
+      break;
+
+    case PROP_MODULES:
+      g_list_free_full (self->modules, g_object_unref);
+      /* NOTE: This takes ownership of the list! */
+      self->modules = g_value_get_pointer (value);
+      break;
+
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+    }
+}
+
+static void
+builder_manifest_class_init (BuilderManifestClass *klass)
+{
+  GObjectClass *object_class = G_OBJECT_CLASS (klass);
+
+  object_class->finalize = builder_manifest_finalize;
+  object_class->get_property = builder_manifest_get_property;
+  object_class->set_property = builder_manifest_set_property;
+
+  g_object_class_install_property (object_class,
+                                   PROP_APP_ID,
+                                   g_param_spec_string ("app-id",
+                                                        "",
+                                                        "",
+                                                        NULL,
+                                                        G_PARAM_READWRITE));
+  g_object_class_install_property (object_class,
+                                   PROP_BUILD_OPTIONS,
+                                   g_param_spec_object ("build-options",
+                                                        "",
+                                                        "",
+                                                        BUILDER_TYPE_OPTIONS,
+                                                        G_PARAM_READWRITE));
+  g_object_class_install_property (object_class,
+                                   PROP_MODULES,
+                                   g_param_spec_pointer ("modules",
+                                                         "",
+                                                         "",
+                                                         G_PARAM_READWRITE));
+}
+
+static void
+builder_manifest_init (BuilderManifest *self)
+{
+}
+
+static gboolean
+builder_manifest_deserialize_property (JsonSerializable *serializable,
+                                       const gchar      *property_name,
+                                       GValue           *value,
+                                       GParamSpec       *pspec,
+                                       JsonNode         *property_node)
+{
+  if (strcmp (property_name, "modules") == 0)
+    {
+      if (JSON_NODE_TYPE (property_node) == JSON_NODE_NULL)
+        {
+          g_value_set_pointer (value, NULL);
+          return TRUE;
+        }
+      else if (JSON_NODE_TYPE (property_node) == JSON_NODE_ARRAY)
+        {
+          JsonArray *array = json_node_get_array (property_node);
+          guint i, array_len = json_array_get_length (array);
+          GList *modules = NULL;
+          GObject *module;
+
+          for (i = 0; i < array_len; i++)
+            {
+              JsonNode *element_node = json_array_get_element (array, i);
+
+              if (JSON_NODE_TYPE (element_node) != JSON_NODE_OBJECT)
+                {
+                  g_list_free_full (modules, g_object_unref);
+                  return FALSE;
+                }
+
+              module = json_gobject_deserialize (BUILDER_TYPE_MODULE, element_node);
+              if (module == NULL)
+                {
+                  g_list_free_full (modules, g_object_unref);
+                  return FALSE;
+                }
+
+              modules = g_list_prepend (modules, module);
+            }
+
+          g_value_set_pointer (value, g_list_reverse (modules));
+
+          return TRUE;
+        }
+
+      return FALSE;
+    }
+  else
+    return json_serializable_default_deserialize_property (serializable,
+                                                           property_name,
+                                                           value,
+                                                           pspec, property_node);
+}
+
+static void
+serializable_iface_init (JsonSerializableIface *serializable_iface)
+{
+  serializable_iface->deserialize_property = builder_manifest_deserialize_property;
+}
+
+const char *
+builder_manifest_get_app_id  (BuilderManifest *self)
+{
+  return self->app_id;
+}
+
+BuilderOptions *
+builder_manifest_get_build_options (BuilderManifest *self)
+{
+  return self->build_options;
+}
+
+GList *
+builder_manifest_get_modules (BuilderManifest *self)
+{
+  return self->modules;
+}
