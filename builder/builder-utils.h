@@ -18,30 +18,18 @@
  *       Alexander Larsson <alexl@redhat.com>
  */
 
-#ifndef __BUILDER_CONTEXT_H__
-#define __BUILDER_CONTEXT_H__
+#ifndef __BUILDER_UTILS_H__
+#define __BUILDER_UTILS_H__
 
 #include <gio/gio.h>
 #include <libsoup/soup.h>
 
 G_BEGIN_DECLS
 
-typedef struct BuilderContext BuilderContext;
+typedef struct BuilderUtils BuilderUtils;
 
-#define BUILDER_TYPE_CONTEXT (builder_context_get_type())
-#define BUILDER_CONTEXT(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), BUILDER_TYPE_CONTEXT, BuilderContext))
-#define BUILDER_IS_CONTEXT(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), BUILDER_TYPE_CONTEXT))
-
-GType builder_context_get_type (void);
-
-GFile *         builder_context_get_base_dir     (BuilderContext *self);
-GFile *         builder_context_get_download_dir (BuilderContext *self);
-SoupSession *   builder_context_get_soup_session (BuilderContext *self);
-
-BuilderContext *builder_context_new              (GFile          *base_dir);
-
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(BuilderContext, g_object_unref)
+char *builder_uri_to_filename (const char *uri);
 
 G_END_DECLS
 
-#endif /* __BUILDER_CONTEXT_H__ */
+#endif /* __BUILDER_UTILS_H__ */

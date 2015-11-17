@@ -23,13 +23,18 @@
 
 #include <json-glib/json-glib.h>
 
+#include "builder-context.h"
+
 G_BEGIN_DECLS
 
 typedef struct BuilderSource BuilderSource;
 
-#define BUILDER_TYPE_SOURCE (builder_source_get_type())
-#define BUILDER_SOURCE(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), BUILDER_TYPE_SOURCE, BuilderSource))
-#define BUILDER_IS_SOURCE(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), BUILDER_TYPE_SOURCE))
+#define BUILDER_TYPE_SOURCE             (builder_source_get_type())
+#define BUILDER_SOURCE(obj)             (G_TYPE_CHECK_INSTANCE_CAST ((obj), BUILDER_TYPE_SOURCE, BuilderSource))
+#define BUILDER_SOURCE_CLASS(klass)	(G_TYPE_CHECK_CLASS_CAST ((klass), BUILDER_TYPE_SOURCE, BuilderSourceClass))
+#define BUILDER_IS_SOURCE(obj)          (G_TYPE_CHECK_INSTANCE_TYPE ((obj), BUILDER_TYPE_SOURCE))
+#define BUILDER_IS_SOURCE_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE ((klass), BUILDER_TYPE_SOURCE))
+#define BUILDER_SOURCE_GET_CLASS(obj)   (G_TYPE_INSTANCE_GET_CLASS ((obj), BUILDER_TYPE_SOURCE, BuilderSourceClass))
 
 struct BuilderSource {
   GObject parent;
@@ -39,11 +44,19 @@ struct BuilderSource {
 
 typedef struct {
   GObjectClass parent_class;
+
+  gboolean (* download) (BuilderSource *self,
+                         BuilderContext *context,
+                         GError **error);
 } BuilderSourceClass;
 
 GType builder_source_get_type (void);
 
 BuilderSource * builder_source_from_json (JsonNode *node);
+
+gboolean builder_source_download (BuilderSource *self,
+                                  BuilderContext *context,
+                                  GError **error);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(BuilderSource, g_object_unref)
 

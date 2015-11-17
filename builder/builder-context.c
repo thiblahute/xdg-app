@@ -33,6 +33,7 @@ struct BuilderContext {
   GObject parent;
 
   GFile *base_dir;
+  SoupSession *soup_session;
 };
 
 typedef struct {
@@ -54,6 +55,7 @@ builder_context_finalize (GObject *object)
   BuilderContext *self = (BuilderContext *)object;
 
   g_clear_object (&self->base_dir);
+  g_clear_object (&self->soup_session);
 
   G_OBJECT_CLASS (builder_context_parent_class)->finalize (object);
 }
@@ -122,8 +124,42 @@ builder_context_init (BuilderContext *self)
 GFile *
 builder_context_get_base_dir (BuilderContext  *self)
 {
-  return self->base_dir;
+  return g_object_ref (self->base_dir);
 }
+
+GFile *
+builder_context_get_download_dir (BuilderContext  *self)
+{
+  return g_file_get_child (self->base_dir, "downloads");
+}
+
+SoupSession *
+builder_context_get_soup_session (BuilderContext *self)
+{
+  if (self->soup_session == NULL)
+    {
+      const char *http_proxy;
+
+      self->soup_session = soup_session_new_with_options (SOUP_SESSION_USER_AGENT, "xdg-app-builder ",
+                                                          SOUP_SESSION_SSL_USE_SYSTEM_CA_FILE, TRUE,
+                                                          SOUP_SESSION_USE_THREAD_CONTEXT, TRUE,
+                                                          SOUP_SESSION_TIMEOUT, 60,
+                                                          SOUP_SESSION_IDLE_TIMEOUT, 60,
+                                                          NULL);
+      http_proxy = g_getenv ("http_proxy");
+      if (http_proxy)
+        {
+          g_autoptr(SoupURI) proxy_uri = soup_uri_new (http_proxy);
+          if (!proxy_uri)
+            g_warning ("Invalid proxy URI '%s'", http_proxy);
+          else
+            g_object_set (self->soup_session, SOUP_SESSION_PROXY_URI, proxy_uri, NULL);
+        }
+    }
+
+  return self->soup_session;
+}
+
 
 BuilderContext *
 builder_context_new (GFile *base_dir)

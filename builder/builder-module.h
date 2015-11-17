@@ -38,6 +38,10 @@ GType builder_module_get_type (void);
 const char * builder_module_get_name    (BuilderModule  *self);
 GList *      builder_module_get_sources (BuilderModule  *self);
 
+gboolean builder_module_download_sources (BuilderModule *self,
+                                          BuilderContext *context,
+                                          GError **error);
+
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(BuilderModule, g_object_unref)
 
 G_END_DECLS

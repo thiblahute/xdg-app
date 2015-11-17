@@ -27,12 +27,15 @@
 #include <stdlib.h>
 #include <sys/statfs.h>
 
+#include "xdg-app-utils.h"
+
 #include "builder-source-tar.h"
 
 struct BuilderSourceTar {
   BuilderSource parent;
 
   char *url;
+  char *checksum;
 };
 
 typedef struct {
@@ -44,6 +47,7 @@ G_DEFINE_TYPE (BuilderSourceTar, builder_source_tar, BUILDER_TYPE_SOURCE);
 enum {
   PROP_0,
   PROP_URL,
+  PROP_CHECKSUM,
   LAST_PROP
 };
 
@@ -53,6 +57,7 @@ builder_source_tar_finalize (GObject *object)
   BuilderSourceTar *self = (BuilderSourceTar *)object;
 
   g_free (self->url);
+  g_free (self->checksum);
 
   G_OBJECT_CLASS (builder_source_tar_parent_class)->finalize (object);
 }
@@ -69,6 +74,10 @@ builder_source_tar_get_property (GObject    *object,
     {
     case PROP_URL:
       g_value_set_string (value, self->url);
+      break;
+
+    case PROP_CHECKSUM:
+      g_value_set_string (value, self->checksum);
       break;
 
     default:
@@ -91,23 +100,184 @@ builder_source_tar_set_property (GObject      *object,
       self->url = g_value_dup_string (value);
       break;
 
+    case PROP_CHECKSUM:
+      g_free (self->checksum);
+      self->checksum = g_value_dup_string (value);
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
     }
 }
 
+static SoupURI *
+get_uri (BuilderSourceTar *self,
+         GError **error)
+{
+  SoupURI *uri;
+
+  if (self->url == NULL)
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "URL not specified");
+      return NULL;
+    }
+
+  uri = soup_uri_new (self->url);
+  if (uri == NULL)
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "Invalid URL '%s'", self->url);
+      return NULL;
+    }
+  return uri;
+}
+
+static GFile *
+get_download_location (BuilderSourceTar *self,
+                       BuilderContext *context,
+                       GError **error)
+{
+  g_autoptr(SoupURI) uri = NULL;
+  const char *path;
+  g_autofree char *base_name = NULL;
+  g_autoptr(GFile) download_dir = NULL;
+  g_autoptr(GFile) checksum_dir = NULL;
+  g_autoptr(GFile) file = NULL;
+
+  uri = get_uri (self, error);
+  if (uri == NULL)
+    return FALSE;
+
+  path = soup_uri_get_path (uri);
+
+  base_name = g_path_get_basename (path);
+
+  if (self->checksum == NULL || *self->checksum == 0)
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "Checksum not specified");
+      return FALSE;
+    }
+
+  download_dir = builder_context_get_download_dir (context);
+  checksum_dir = g_file_get_child (download_dir, self->checksum);
+  file = g_file_get_child (checksum_dir, base_name);
+
+  return g_steal_pointer (&file);
+}
+
+static gboolean
+builder_source_tar_download (BuilderSource *source,
+                             BuilderContext *context,
+                             GError **error)
+{
+  BuilderSourceTar *self = BUILDER_SOURCE_TAR (source);
+  g_autoptr (GFile) file = NULL;
+  g_autoptr (GFile) dir = NULL;
+  g_autoptr(SoupURI) uri = NULL;
+  SoupSession *session;
+  g_autofree char *url = NULL;
+  g_autofree char *dir_path = NULL;
+  g_autofree char *checksum = NULL;
+  g_autofree char *base_name = NULL;
+  g_autoptr(SoupMessage) msg = NULL;
+
+  file = get_download_location (self, context, error);
+  if (file == NULL)
+    return FALSE;
+
+  if (g_file_query_exists (file, NULL))
+    return TRUE;
+
+  base_name = g_file_get_basename (file);
+
+  uri = get_uri (self, error);
+  if (uri == NULL)
+    return FALSE;
+
+  url = g_strdup (self->url);
+
+  session = builder_context_get_soup_session (context);
+
+  while (TRUE)
+    {
+      g_clear_object (&msg);
+      msg = soup_message_new ("GET", url);
+      g_debug ("GET %s", self->url);
+      g_print ("Downloading %s...", base_name);
+      soup_session_send_message (session, msg);
+      g_print ("done\n");
+
+      g_debug ("response: %d %s", msg->status_code, msg->reason_phrase);
+
+      if (SOUP_STATUS_IS_REDIRECTION (msg->status_code))
+        {
+          const char *header = soup_message_headers_get_one (msg->response_headers, "Location");
+          if (header)
+            {
+              g_autoptr(SoupURI) new_uri = soup_uri_new_with_base (soup_message_get_uri (msg), header);
+              g_free (url);
+              url = soup_uri_to_string (uri, FALSE);
+              g_debug ("  -> %s", header);
+              continue;
+            }
+        }
+      else if (!SOUP_STATUS_IS_SUCCESSFUL (msg->status_code))
+        {
+          g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                       "Failed to download %s (error %d): %s", base_name, msg->status_code, msg->reason_phrase);
+          return FALSE;
+        }
+
+      break; /* No redirection */
+    }
+
+  checksum = g_compute_checksum_for_string (G_CHECKSUM_SHA256,
+                                            msg->response_body->data,
+                                            msg->response_body->length);
+
+  if (strcmp (checksum, self->checksum) != 0)
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                   "Wrong checksum for %s, expected %s, was %s", base_name, self->checksum, checksum);
+      return FALSE;
+    }
+
+  dir = g_file_get_parent (file);
+  dir_path = g_file_get_path (dir);
+  g_mkdir_with_parents (dir_path, 0755);
+
+  if (!g_file_replace_contents (file,
+                                msg->response_body->data,
+                                msg->response_body->length,
+                                NULL, FALSE, G_FILE_CREATE_NONE, NULL,
+                                NULL, error))
+    return FALSE;
+
+  return TRUE;
+}
+
+
 static void
 builder_source_tar_class_init (BuilderSourceTarClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
+  BuilderSourceClass *source_class = BUILDER_SOURCE_CLASS (klass);
 
   object_class->finalize = builder_source_tar_finalize;
   object_class->get_property = builder_source_tar_get_property;
   object_class->set_property = builder_source_tar_set_property;
 
+  source_class->download = builder_source_tar_download;
+
   g_object_class_install_property (object_class,
                                    PROP_URL,
                                    g_param_spec_string ("url",
+                                                        "",
+                                                        "",
+                                                        NULL,
+                                                        G_PARAM_READWRITE));
+  g_object_class_install_property (object_class,
+                                   PROP_CHECKSUM,
+                                   g_param_spec_string ("checksum",
                                                         "",
                                                         "",
                                                         NULL,

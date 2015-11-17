@@ -214,3 +214,21 @@ builder_module_get_sources (BuilderModule  *self)
 {
   return self->sources;
 }
+
+gboolean
+builder_module_download_sources (BuilderModule *self,
+                                 BuilderContext *context,
+                                 GError **error)
+{
+  GList *l;
+
+  for (l = self->sources; l != NULL; l = l->next)
+    {
+      BuilderSource *source = l->data;
+
+      if (!builder_source_download (source, context, error))
+        return FALSE;
+    }
+
+  return TRUE;
+}

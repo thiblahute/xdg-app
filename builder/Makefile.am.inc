@@ -20,6 +20,8 @@ xdg_app_builder_SOURCES = \
 	builder/builder-source-file.h \
 	builder/builder-context.c \
 	builder/builder-context.h \
+	builder/builder-utils.c \
+	builder/builder-utils.h \
 	$(NULL)
 
 xdg_app_builder_LDADD = $(BASE_LIBS) $(OSTREE_LIBS) $(JSON_LIBS) $(SOUP_LIBS) $(LIBARCHIVE_LIBS) libglnx.la libxdgapp.la

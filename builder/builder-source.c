@@ -93,6 +93,16 @@ builder_source_set_property (GObject      *object,
     }
 }
 
+static gboolean
+builder_source_real_download (BuilderSource *self,
+                              BuilderContext *context,
+                              GError **error)
+{
+  g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+               "Download not implemented for type %s", g_type_name_from_instance ((GTypeInstance *)self));
+  return FALSE;
+}
+
 static void
 builder_source_class_init (BuilderSourceClass *klass)
 {
@@ -101,6 +111,8 @@ builder_source_class_init (BuilderSourceClass *klass)
   object_class->finalize = builder_source_finalize;
   object_class->get_property = builder_source_get_property;
   object_class->set_property = builder_source_set_property;
+
+  klass->download = builder_source_real_download;
 
   g_object_class_install_property (object_class,
                                    PROP_DEST,
@@ -141,4 +153,16 @@ builder_source_from_json (JsonNode *node)
     g_warning ("Unknown source type %s", type);
 
   return NULL;
+}
+
+gboolean
+builder_source_download (BuilderSource *self,
+                         BuilderContext *context,
+                         GError **error)
+{
+  BuilderSourceClass *class;
+
+  class = BUILDER_SOURCE_GET_CLASS (self);
+
+  return class->download (self, context, error);
 }

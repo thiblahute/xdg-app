@@ -64,6 +64,8 @@ main (int    argc,
   GOptionContext *context;
   GList *modules, *l;
   g_autofree gchar *json = NULL;
+  g_autoptr(BuilderContext) build_context = NULL;
+  g_autoptr(GFile) basedir = NULL;;
 
   setlocale (LC_ALL, "");
 
@@ -111,6 +113,9 @@ main (int    argc,
       return 1;
     }
 
+  basedir = g_file_new_for_path (g_get_current_dir ());
+  build_context = builder_context_new (basedir);
+
   g_print ("app id %s\n", builder_manifest_get_app_id (manifest));
   options = builder_manifest_get_build_options (manifest);
   g_print ("options %p\n", options);
@@ -129,6 +134,11 @@ main (int    argc,
         {
           BuilderSource *s = ll->data;
           g_print ("    %s (%p)\n", g_type_name_from_instance ((GTypeInstance *)s), s);
+        }
+      if (! builder_module_download_sources (m, build_context, &error))
+        {
+          g_print ("error: %s\n", error->message);
+          return 1;
         }
     }
 
