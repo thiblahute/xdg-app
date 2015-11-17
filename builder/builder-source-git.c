@@ -109,22 +109,67 @@ builder_source_git_set_property (GObject      *object,
     }
 }
 
+typedef struct
+{
+  GError *error;
+  GError *splice_error;
+  GMainLoop *loop;
+  int refs;
+} GitData;
+
 static gboolean git (GFile *dir,
+                     char **output,
                      GError **error,
                      const gchar            *argv1,
                      ...) G_GNUC_NULL_TERMINATED;
 
+
+static void
+git_data_exit (GitData *data)
+{
+  data->refs--;
+  if (data->refs == 0)
+    g_main_loop_quit (data->loop);
+}
+
+static void
+git_output_spliced_cb (GObject    *obj,
+                       GAsyncResult  *result,
+                       gpointer       user_data)
+{
+  GitData *data = user_data;
+
+  g_output_stream_splice_finish (G_OUTPUT_STREAM (obj), result, &data->splice_error);
+  git_data_exit (data);
+}
+
+static void
+git_exit_cb (GObject    *obj,
+             GAsyncResult  *result,
+             gpointer       user_data)
+{
+  GitData *data = user_data;
+
+  g_subprocess_wait_check_finish (G_SUBPROCESS (obj), result, &data->error);
+  git_data_exit (data);
+}
+
 static gboolean
-git (GFile *dir,
-     GError **error,
-     const gchar            *argv1,
+git (GFile        *dir,
+     char        **output,
+     GError      **error,
+     const gchar  *argv1,
      ...)
 {
   g_autoptr(GSubprocessLauncher) launcher = NULL;
   g_autoptr(GSubprocess) subp = NULL;
   GPtrArray *args;
   const gchar *arg;
+  GInputStream *in;
+  g_autoptr(GOutputStream) out = NULL;
+  g_autoptr(GMainLoop) loop = NULL;
   va_list ap;
+  GitData data = {0};
 
   args = g_ptr_array_new ();
   g_ptr_array_add (args, "git");
@@ -137,6 +182,9 @@ git (GFile *dir,
 
   launcher = g_subprocess_launcher_new (0);
 
+  if (output)
+    g_subprocess_launcher_set_flags (launcher, G_SUBPROCESS_FLAGS_STDOUT_PIPE);
+
   if (dir)
     {
       g_autofree char *path = g_file_get_path (dir);
@@ -146,37 +194,62 @@ git (GFile *dir,
   subp = g_subprocess_launcher_spawnv (launcher, (const gchar * const *) args->pdata, error);
   g_ptr_array_free (args, TRUE);
 
-  if (subp == NULL ||
-      !g_subprocess_wait (subp, NULL, error))
+  if (subp == NULL)
     return FALSE;
 
-  if (!g_subprocess_get_successful (subp))
+  loop = g_main_loop_new (NULL, FALSE);
+
+  data.loop = loop;
+  data.refs = 1;
+
+  if (output)
     {
-      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
-                   "Git returned error code %d", g_subprocess_get_status (subp));
+      data.refs++;
+      in = g_subprocess_get_stdout_pipe (subp);
+      out = g_memory_output_stream_new_resizable ();
+      g_output_stream_splice_async  (out,
+                                     in,
+                                     G_OUTPUT_STREAM_SPLICE_CLOSE_TARGET,
+                                     0,
+                                     NULL,
+                                     git_output_spliced_cb,
+                                     &data);
+    }
+
+  g_subprocess_wait_async (subp, NULL, git_exit_cb, &data);
+
+  g_main_loop_run (loop);
+
+  if (data.error)
+    {
+      g_propagate_error (error, data.error);
+      g_clear_error (&data.splice_error);
       return FALSE;
+    }
+
+  if (out)
+    {
+      if (data.splice_error)
+        {
+          g_propagate_error (error, data.splice_error);
+          return FALSE;
+        }
+
+      /* Null terminate */
+      g_output_stream_write (out, "\0", 1, NULL, NULL);
+      *output = g_memory_output_stream_steal_data (G_MEMORY_OUTPUT_STREAM (out));
     }
 
   return TRUE;
 }
 
-static gboolean
-builder_source_git_download (BuilderSource *source,
-                             BuilderContext *context,
-                             GError **error)
+static GFile *
+get_mirror_dir (BuilderSourceGit *self, BuilderContext *context)
 {
-  BuilderSourceGit *self = BUILDER_SOURCE_GIT (source);
-  g_autofree char *filename = NULL;
   g_autoptr(GFile) download_dir = NULL;
   g_autoptr(GFile) git_dir = NULL;
+  g_autofree char *filename = NULL;
   g_autofree char *git_dir_path = NULL;
-  g_autoptr(GFile) mirror_dir = NULL;
-
-  if (self->url == NULL)
-    {
-      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "URL not specified");
-      return NULL;
-    }
 
   download_dir = builder_context_get_download_dir (context);
   git_dir = g_file_get_child (download_dir, "git");
@@ -185,31 +258,61 @@ builder_source_git_download (BuilderSource *source,
   g_mkdir_with_parents (git_dir_path, 0755);
 
   filename = builder_uri_to_filename (self->url);
-  mirror_dir = g_file_get_child (git_dir, filename);
+  return g_file_get_child (git_dir, filename);
+}
+
+
+static char *
+get_current_commit (BuilderSourceGit *self, BuilderContext *context, GError **error)
+{
+  g_autoptr(GFile) mirror_dir = NULL;
+  char *output = NULL;
+
+  mirror_dir = get_mirror_dir (self, context);
+
+  if (!git (mirror_dir, &output, error,
+           "rev-parse", self->branch, NULL))
+    return NULL;
+
+  return output;
+}
+
+static gboolean
+builder_source_git_download (BuilderSource *source,
+                             BuilderContext *context,
+                             GError **error)
+{
+  BuilderSourceGit *self = BUILDER_SOURCE_GIT (source);
+  g_autoptr(GFile) mirror_dir = NULL;
+
+  if (self->url == NULL)
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "URL not specified");
+      return NULL;
+    }
+
+  mirror_dir = get_mirror_dir (self, context);
 
   if (!g_file_query_exists (mirror_dir, NULL))
     {
+      g_autofree char *filename = g_file_get_basename (mirror_dir);
+      g_autoptr(GFile) parent = g_file_get_parent (mirror_dir);
       g_autofree char *filename_tmp = g_strconcat (filename, ".clone_tmp", NULL);
-      g_autoptr(GFile) mirror_dir_tmp = g_file_get_child (git_dir, filename_tmp);
+      g_autoptr(GFile) mirror_dir_tmp = g_file_get_child (parent, filename_tmp);
 
-      g_autofree char *mirror_path_tmp = g_file_get_path (mirror_dir_tmp);
-
-      if (!git (NULL, error,
-                "clone",
-                "--mirror",
-                self->url,
-                mirror_path_tmp,
-                NULL) ||
+      if (!git (parent, NULL, error,
+                "clone", "--mirror", self->url,  filename_tmp, NULL) ||
           !g_file_move (mirror_dir_tmp, mirror_dir, 0, NULL, NULL, NULL, error))
         return FALSE;
     }
   else
     {
-      if (!git (mirror_dir, error,
-                "fetch",
-                NULL))
+      if (!git (mirror_dir, NULL, error,
+                "fetch", NULL))
         return FALSE;
     }
+
+  g_print ("Current commit: %s\n", get_current_commit (self, context, NULL));
 
   g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
                "Download git not implemented");
