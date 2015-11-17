@@ -255,6 +255,65 @@ builder_source_tar_download (BuilderSource *source,
   return TRUE;
 }
 
+static gboolean
+tar (GFile *dir,
+     GError **error,
+     const gchar            *argv1,
+     ...)
+{
+  g_autoptr(GSubprocessLauncher) launcher = NULL;
+  g_autoptr(GSubprocess) subp = NULL;
+  GPtrArray *args;
+  const gchar *arg;
+  va_list ap;
+
+  args = g_ptr_array_new ();
+  g_ptr_array_add (args, "tar");
+  va_start (ap, argv1);
+  g_ptr_array_add (args, (gchar *) argv1);
+  while ((arg = va_arg (ap, const gchar *)))
+    g_ptr_array_add (args, (gchar *) arg);
+  g_ptr_array_add (args, NULL);
+  va_end (ap);
+
+  launcher = g_subprocess_launcher_new (0);
+
+  if (dir)
+    {
+      g_autofree char *path = g_file_get_path (dir);
+      g_subprocess_launcher_set_cwd (launcher, path);
+    }
+
+  subp = g_subprocess_launcher_spawnv (launcher, (const gchar * const *) args->pdata, error);
+  g_ptr_array_free (args, TRUE);
+
+  if (subp == NULL ||
+      !g_subprocess_wait_check (subp, NULL, error))
+    return FALSE;
+
+  return TRUE;
+}
+
+static gboolean
+builder_source_tar_extract (BuilderSource *source,
+                            GFile *dest,
+                            BuilderContext *context,
+                            GError **error)
+{
+  BuilderSourceTar *self = BUILDER_SOURCE_TAR (source);
+  g_autoptr(GFile) tarfile = NULL;
+  g_autofree char *tar_path = NULL;
+
+  tarfile = get_download_location (self, context, error);
+  if (tarfile == NULL)
+    return FALSE;
+
+  tar_path = g_file_get_path (tarfile);
+  if (!tar (dest, error, "xvf", tar_path, "--strip-components=1", NULL))
+    return FALSE;
+
+  return TRUE;
+}
 
 static void
 builder_source_tar_class_init (BuilderSourceTarClass *klass)
@@ -267,6 +326,7 @@ builder_source_tar_class_init (BuilderSourceTarClass *klass)
   object_class->set_property = builder_source_tar_set_property;
 
   source_class->download = builder_source_tar_download;
+  source_class->extract = builder_source_tar_extract;
 
   g_object_class_install_property (object_class,
                                    PROP_URL,

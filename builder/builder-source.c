@@ -103,6 +103,17 @@ builder_source_real_download (BuilderSource *self,
   return FALSE;
 }
 
+static gboolean
+builder_source_real_extract (BuilderSource *self,
+                             GFile *dest,
+                             BuilderContext *context,
+                             GError **error)
+{
+  g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+               "Extract not implemented for type %s", g_type_name_from_instance ((GTypeInstance *)self));
+  return FALSE;
+}
+
 static void
 builder_source_class_init (BuilderSourceClass *klass)
 {
@@ -113,6 +124,7 @@ builder_source_class_init (BuilderSourceClass *klass)
   object_class->set_property = builder_source_set_property;
 
   klass->download = builder_source_real_download;
+  klass->extract = builder_source_real_extract;
 
   g_object_class_install_property (object_class,
                                    PROP_DEST,
@@ -165,4 +177,23 @@ builder_source_download (BuilderSource *self,
   class = BUILDER_SOURCE_GET_CLASS (self);
 
   return class->download (self, context, error);
+}
+
+gboolean
+builder_source_extract  (BuilderSource *self,
+                         GFile *dest,
+                         BuilderContext *context,
+                         GError **error)
+{
+  BuilderSourceClass *class;
+  g_autoptr(GFile) real_dest;
+
+  class = BUILDER_SOURCE_GET_CLASS (self);
+
+  if (self->dest != NULL)
+    real_dest = g_file_resolve_relative_path (dest, self->dest);
+  else
+    real_dest = g_object_ref (dest);
+
+  return class->extract (self, real_dest, context, error);
 }

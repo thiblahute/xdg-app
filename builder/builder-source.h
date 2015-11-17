@@ -48,6 +48,10 @@ typedef struct {
   gboolean (* download) (BuilderSource *self,
                          BuilderContext *context,
                          GError **error);
+  gboolean (* extract) (BuilderSource *self,
+                        GFile *dest,
+                        BuilderContext *context,
+                        GError **error);
 } BuilderSourceClass;
 
 GType builder_source_get_type (void);
@@ -57,6 +61,11 @@ BuilderSource * builder_source_from_json (JsonNode *node);
 gboolean builder_source_download (BuilderSource *self,
                                   BuilderContext *context,
                                   GError **error);
+gboolean builder_source_extract  (BuilderSource *self,
+                                  GFile *dest,
+                                  BuilderContext *context,
+                                  GError **error);
+
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(BuilderSource, g_object_unref)
 
