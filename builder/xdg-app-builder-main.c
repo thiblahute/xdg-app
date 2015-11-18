@@ -150,7 +150,7 @@ main (int    argc,
           return 1;
         }
 
-      g_print ("    extracting sources\n");
+      g_print ("    extracting sources to %s\n", buildname);
       if (!builder_module_extract_sources (m, build_dir, build_context, &error))
         {
           g_print ("extract error: %s\n", error->message);

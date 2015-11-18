@@ -261,7 +261,7 @@ get_mirror_dir (BuilderSourceGit *self, BuilderContext *context)
   return g_file_get_child (git_dir, filename);
 }
 
-
+/*
 static char *
 get_current_commit (BuilderSourceGit *self, BuilderContext *context, GError **error)
 {
@@ -276,6 +276,7 @@ get_current_commit (BuilderSourceGit *self, BuilderContext *context, GError **er
 
   return output;
 }
+*/
 
 static gboolean
 builder_source_git_download (BuilderSource *source,
@@ -312,11 +313,36 @@ builder_source_git_download (BuilderSource *source,
         return FALSE;
     }
 
-  g_print ("Current commit: %s\n", get_current_commit (self, context, NULL));
+  return TRUE;
+}
 
-  g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
-               "Download git not implemented");
-  return FALSE;
+static gboolean
+builder_source_git_extract (BuilderSource *source,
+                            GFile *dest,
+                            BuilderContext *context,
+                            GError **error)
+{
+  BuilderSourceGit *self = BUILDER_SOURCE_GIT (source);
+  g_autoptr(GFile) mirror_dir = NULL;
+  const char *branch;
+  g_autofree char *mirror_dir_path = NULL;
+  g_autofree char *dest_path = NULL;
+
+  mirror_dir = get_mirror_dir (self, context);
+
+  if (self->branch)
+    branch = branch;
+  else
+    branch = "master";
+
+  mirror_dir_path = g_file_get_path (mirror_dir);
+  dest_path = g_file_get_path (dest);
+
+  if (!git (NULL, NULL, error,
+            "clone", "--shared", "--branch", branch, "--recursive", mirror_dir_path, dest_path, NULL))
+    return FALSE;
+
+  return TRUE;
 }
 
 
@@ -331,6 +357,7 @@ builder_source_git_class_init (BuilderSourceGitClass *klass)
   object_class->set_property = builder_source_git_set_property;
 
   source_class->download = builder_source_git_download;
+  source_class->extract = builder_source_git_extract;
 
   g_object_class_install_property (object_class,
                                    PROP_URL,
