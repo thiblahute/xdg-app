@@ -129,7 +129,8 @@ main (int    argc,
       const char *name = builder_module_get_name (m);
       g_autofree char *buildname = g_strdup_printf ("build-%s", name);
       g_autoptr(GFile) base_dir = builder_context_get_base_dir (build_context);
-      g_autoptr(GFile) build_dir = g_file_get_child (base_dir, buildname);
+      g_autoptr(GFile) app_dir = g_file_get_child (base_dir, "app");
+      g_autoptr(GFile) source_dir = g_file_get_child (base_dir, buildname);
       g_print ("  Module '%s'\n", name);
       g_print ("    downloading sources\n");
       if (! builder_module_download_sources (m, build_context, &error))
@@ -138,22 +139,33 @@ main (int    argc,
           return 1;
         }
 
-      if (!gs_shutil_rm_rf (build_dir, NULL, &error))
+      if (!gs_shutil_rm_rf (source_dir, NULL, &error))
         {
           g_print ("rm error: %s\n", error->message);
           return 1;
         }
 
-      if (!g_file_make_directory_with_parents (build_dir, NULL, &error))
+      if (!g_file_make_directory_with_parents (source_dir, NULL, &error))
         {
           g_print ("mkdir error: %s\n", error->message);
           return 1;
         }
 
       g_print ("    extracting sources to %s\n", buildname);
-      if (!builder_module_extract_sources (m, build_dir, build_context, &error))
+      if (!builder_module_extract_sources (m, source_dir, build_context, &error))
         {
           g_print ("extract error: %s\n", error->message);
+          return 1;
+        }
+
+      if (!builder_module_build (m,
+                                 app_dir,
+                                 source_dir,
+                                 build_context,
+                                 builder_manifest_get_build_options (manifest),
+                                 &error))
+        {
+          g_print ("build error: %s\n", error->message);
           return 1;
         }
     }

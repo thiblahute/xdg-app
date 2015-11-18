@@ -24,6 +24,7 @@
 #include <json-glib/json-glib.h>
 
 #include "builder-source.h"
+#include "builder-options.h"
 
 G_BEGIN_DECLS
 
@@ -38,13 +39,19 @@ GType builder_module_get_type (void);
 const char * builder_module_get_name    (BuilderModule  *self);
 GList *      builder_module_get_sources (BuilderModule  *self);
 
-gboolean builder_module_download_sources (BuilderModule *self,
-                                          BuilderContext *context,
-                                          GError **error);
-gboolean builder_module_extract_sources (BuilderModule *self,
-                                         GFile *dest,
-                                         BuilderContext *context,
-                                         GError **error);
+gboolean builder_module_download_sources (BuilderModule   *self,
+                                          BuilderContext  *context,
+                                          GError         **error);
+gboolean builder_module_extract_sources  (BuilderModule   *self,
+                                          GFile           *dest,
+                                          BuilderContext  *context,
+                                          GError         **error);
+gboolean builder_module_build            (BuilderModule   *self,
+                                          GFile           *app_dir,
+                                          GFile           *source_dir,
+                                          BuilderContext  *context,
+                                          BuilderOptions  *global_options,
+                                          GError         **error);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(BuilderModule, g_object_unref)
 

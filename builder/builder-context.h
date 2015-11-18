@@ -37,6 +37,10 @@ GType builder_context_get_type (void);
 GFile *         builder_context_get_base_dir     (BuilderContext *self);
 GFile *         builder_context_get_download_dir (BuilderContext *self);
 SoupSession *   builder_context_get_soup_session (BuilderContext *self);
+const char *    builder_context_get_arch         (BuilderContext *self);
+void            builder_context_set_arch         (BuilderContext *self,
+                                                  const char     *arch);
+int             builder_context_get_n_cpu        (BuilderContext *self);
 
 BuilderContext *builder_context_new              (GFile          *base_dir);
 

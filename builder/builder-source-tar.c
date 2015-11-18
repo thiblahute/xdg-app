@@ -319,7 +319,7 @@ builder_source_tar_extract (BuilderSource *source,
     return FALSE;
 
   tar_path = g_file_get_path (tarfile);
-  if (!tar (dest, error, "xvf", tar_path, "--strip-components=1", NULL))
+  if (!tar (dest, error, "xf", tar_path, "--strip-components=1", NULL))
     return FALSE;
 
   return TRUE;

@@ -28,12 +28,14 @@
 #include <sys/statfs.h>
 
 #include "builder-context.h"
+#include "xdg-app-utils.h"
 
 struct BuilderContext {
   GObject parent;
 
   GFile *base_dir;
   SoupSession *soup_session;
+  char *arch;
 };
 
 typedef struct {
@@ -56,6 +58,7 @@ builder_context_finalize (GObject *object)
 
   g_clear_object (&self->base_dir);
   g_clear_object (&self->soup_session);
+  g_free (self->arch);
 
   G_OBJECT_CLASS (builder_context_parent_class)->finalize (object);
 }
@@ -160,6 +163,28 @@ builder_context_get_soup_session (BuilderContext *self)
   return self->soup_session;
 }
 
+const char *
+builder_context_get_arch (BuilderContext *self)
+{
+  if (self->arch == NULL)
+    self->arch = g_strdup (xdg_app_get_arch ());
+
+  return (const char *)self->arch;
+}
+
+void
+builder_context_set_arch (BuilderContext *self,
+                          const char     *arch)
+{
+  g_free (self->arch);
+  self->arch = g_strdup (arch);
+}
+
+int
+builder_context_get_n_cpu (BuilderContext *self)
+{
+  return (int)sysconf (_SC_NPROCESSORS_ONLN);
+}
 
 BuilderContext *
 builder_context_new (GFile *base_dir)
