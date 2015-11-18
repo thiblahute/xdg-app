@@ -33,6 +33,7 @@ struct BuilderSourceFile {
   BuilderSource parent;
 
   char *path;
+  char *dest_filename;
 };
 
 typedef struct {
@@ -44,6 +45,7 @@ G_DEFINE_TYPE (BuilderSourceFile, builder_source_file, BUILDER_TYPE_SOURCE);
 enum {
   PROP_0,
   PROP_PATH,
+  PROP_DEST_FILENAME,
   LAST_PROP
 };
 
@@ -53,6 +55,7 @@ builder_source_file_finalize (GObject *object)
   BuilderSourceFile *self = (BuilderSourceFile *)object;
 
   g_free (self->path);
+  g_free (self->dest_filename);
 
   G_OBJECT_CLASS (builder_source_file_parent_class)->finalize (object);
 }
@@ -69,6 +72,10 @@ builder_source_file_get_property (GObject    *object,
     {
     case PROP_PATH:
       g_value_set_string (value, self->path);
+      break;
+
+    case PROP_DEST_FILENAME:
+      g_value_set_string (value, self->dest_filename);
       break;
 
     default:
@@ -91,9 +98,30 @@ builder_source_file_set_property (GObject      *object,
       self->path = g_value_dup_string (value);
       break;
 
+    case PROP_DEST_FILENAME:
+      g_free (self->dest_filename);
+      self->dest_filename = g_value_dup_string (value);
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
     }
+}
+
+static GFile *
+get_source_file (BuilderSourceFile *self,
+                 BuilderContext *context,
+                 GError **error)
+{
+  g_autoptr(GFile) base_dir = builder_context_get_base_dir (context);
+
+  if (self->path == NULL || self->path[0] == 0)
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "path not specified");
+      return NULL;
+    }
+
+  return g_file_resolve_relative_path (base_dir, self->path);
 }
 
 static gboolean
@@ -101,6 +129,51 @@ builder_source_file_download (BuilderSource *source,
                               BuilderContext *context,
                               GError **error)
 {
+  BuilderSourceFile *self = BUILDER_SOURCE_FILE (source);
+  g_autoptr(GFile) src = NULL;
+
+  src = get_source_file (self, context, error);
+  if (src == NULL)
+    return FALSE;
+
+  if (!g_file_query_exists (src, NULL))
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "Can't find file at %s", self->path);
+      return FALSE;
+    }
+
+  return TRUE;
+}
+
+static gboolean
+builder_source_file_extract (BuilderSource *source,
+                             GFile *dest,
+                             BuilderContext *context,
+                             GError **error)
+{
+  BuilderSourceFile *self = BUILDER_SOURCE_FILE (source);
+  g_autoptr(GFile) src = NULL;
+  g_autoptr(GFile) dest_file = NULL;
+  g_autofree char *dest_filename = NULL;
+
+  src = get_source_file (self, context, error);
+  if (src == NULL)
+    return FALSE;
+
+  if (self->dest_filename)
+    dest_filename = g_strdup (self->dest_filename);
+  else
+    dest_filename = g_file_get_basename (src);
+
+  dest_file = g_file_get_child (dest, dest_filename);
+
+  if (!g_file_copy (src, dest_file,
+                    G_FILE_COPY_OVERWRITE,
+                    NULL,
+                    NULL, NULL,
+                    error))
+    return FALSE;
+
   return TRUE;
 }
 
@@ -115,10 +188,18 @@ builder_source_file_class_init (BuilderSourceFileClass *klass)
   object_class->set_property = builder_source_file_set_property;
 
   source_class->download = builder_source_file_download;
+  source_class->extract = builder_source_file_extract;
 
   g_object_class_install_property (object_class,
                                    PROP_PATH,
                                    g_param_spec_string ("path",
+                                                        "",
+                                                        "",
+                                                        NULL,
+                                                        G_PARAM_READWRITE));
+  g_object_class_install_property (object_class,
+                                   PROP_DEST_FILENAME,
+                                   g_param_spec_string ("dest-filename",
                                                         "",
                                                         "",
                                                         NULL,

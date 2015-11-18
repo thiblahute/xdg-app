@@ -41,6 +41,10 @@ GList *      builder_module_get_sources (BuilderModule  *self);
 gboolean builder_module_download_sources (BuilderModule *self,
                                           BuilderContext *context,
                                           GError **error);
+gboolean builder_module_extract_sources (BuilderModule *self,
+                                         GFile *dest,
+                                         BuilderContext *context,
+                                         GError **error);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(BuilderModule, g_object_unref)
 

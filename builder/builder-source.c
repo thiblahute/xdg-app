@@ -191,9 +191,16 @@ builder_source_extract  (BuilderSource *self,
   class = BUILDER_SOURCE_GET_CLASS (self);
 
   if (self->dest != NULL)
-    real_dest = g_file_resolve_relative_path (dest, self->dest);
+    {
+      real_dest = g_file_resolve_relative_path (dest, self->dest);
+
+      if (!g_file_query_exists (real_dest, NULL) &&
+          !g_file_make_directory_with_parents (real_dest, NULL, error))
+        return FALSE;
+    }
   else
     real_dest = g_object_ref (dest);
+
 
   return class->extract (self, real_dest, context, error);
 }

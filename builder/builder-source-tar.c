@@ -36,6 +36,7 @@ struct BuilderSourceTar {
 
   char *url;
   char *checksum;
+  guint strip_components;
 };
 
 typedef struct {
@@ -48,6 +49,7 @@ enum {
   PROP_0,
   PROP_URL,
   PROP_CHECKSUM,
+  PROP_STRIP_COMPONENTS,
   LAST_PROP
 };
 
@@ -80,6 +82,10 @@ builder_source_tar_get_property (GObject    *object,
       g_value_set_string (value, self->checksum);
       break;
 
+    case PROP_STRIP_COMPONENTS:
+      g_value_set_uint (value, self->strip_components);
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
     }
@@ -103,6 +109,10 @@ builder_source_tar_set_property (GObject      *object,
     case PROP_CHECKSUM:
       g_free (self->checksum);
       self->checksum = g_value_dup_string (value);
+      break;
+
+    case PROP_STRIP_COMPONENTS:
+      self->strip_components = g_value_get_uint (value);
       break;
 
     default:
@@ -342,9 +352,18 @@ builder_source_tar_class_init (BuilderSourceTarClass *klass)
                                                         "",
                                                         NULL,
                                                         G_PARAM_READWRITE));
+  g_object_class_install_property (object_class,
+                                   PROP_STRIP_COMPONENTS,
+                                   g_param_spec_uint ("strip-components",
+                                                      "",
+                                                      "",
+                                                      0, G_MAXUINT,
+                                                      1,
+                                                      G_PARAM_READWRITE));
 }
 
 static void
 builder_source_tar_init (BuilderSourceTar *self)
 {
+  self->strip_components = 1;
 }

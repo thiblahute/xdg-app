@@ -128,11 +128,10 @@ main (int    argc,
       BuilderModule *m = l->data;
       const char *name = builder_module_get_name (m);
       g_autofree char *buildname = g_strdup_printf ("build-%s", name);
-      GList *sources, *ll;
       g_autoptr(GFile) base_dir = builder_context_get_base_dir (build_context);
       g_autoptr(GFile) build_dir = g_file_get_child (base_dir, buildname);
       g_print ("  Module '%s'\n", name);
-      g_print ("  sources\n");
+      g_print ("    downloading sources\n");
       if (! builder_module_download_sources (m, build_context, &error))
         {
           g_print ("error: %s\n", error->message);
@@ -151,18 +150,11 @@ main (int    argc,
           return 1;
         }
 
-      sources = builder_module_get_sources (m);
-      for (ll = sources; ll != NULL; ll = ll->next)
+      g_print ("    extracting sources\n");
+      if (!builder_module_extract_sources (m, build_dir, build_context, &error))
         {
-          BuilderSource *s = ll->data;
-          g_print ("    %s (%p)\n", g_type_name_from_instance ((GTypeInstance *)s), s);
-
-          if (!builder_source_extract  (s, build_dir, build_context, &error))
-            {
-              g_print ("extract error: %s\n", error->message);
-              return 1;
-            }
-
+          g_print ("extract error: %s\n", error->message);
+          return 1;
         }
     }
 

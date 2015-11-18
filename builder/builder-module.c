@@ -232,3 +232,26 @@ builder_module_download_sources (BuilderModule *self,
 
   return TRUE;
 }
+
+gboolean
+builder_module_extract_sources (BuilderModule *self,
+                                GFile *dest,
+                                BuilderContext *context,
+                                GError **error)
+{
+  GList *l;
+
+  if (!g_file_query_exists (dest, NULL) &&
+      !g_file_make_directory_with_parents (dest, NULL, error))
+    return FALSE;
+
+  for (l = self->sources; l != NULL; l = l->next)
+    {
+      BuilderSource *source = l->data;
+
+      if (!builder_source_extract  (source, dest, context, error))
+        return FALSE;
+    }
+
+  return TRUE;
+}
