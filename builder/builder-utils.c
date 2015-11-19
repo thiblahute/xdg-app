@@ -21,6 +21,8 @@
 
 #include "config.h"
 
+#include <string.h>
+
 #include "builder-utils.h"
 
 char *
@@ -48,4 +50,54 @@ builder_uri_to_filename (const char *uri)
     }
 
   return g_string_free (s, FALSE);
+}
+
+void
+builder_checksum_str (GChecksum *checksum, const char *str)
+{
+  /* We include the terminating zero so that we make
+   * a difference between NULL and "". */
+
+  if (str)
+    g_checksum_update (checksum, (const guchar *)str, strlen (str) + 1);
+  else
+    /* Always add something so we can't be fooled by a sequence like
+       NULL, "a" turning into "a", NULL. */
+    g_checksum_update (checksum, (const guchar *)"\1", 1);
+}
+
+void
+builder_checksum_strv (GChecksum *checksum, char **strv)
+{
+  int i;
+
+  if (strv)
+    {
+      g_checksum_update (checksum, (const guchar *)"\1", 1);
+      for (i = 0; strv[i] != NULL; i++)
+        builder_checksum_str (checksum, strv[i]);
+    }
+  else
+    g_checksum_update (checksum, (const guchar *)"\2", 1);
+}
+
+void
+builder_checksum_boolean (GChecksum *checksum, gboolean val)
+{
+  if (val)
+    g_checksum_update (checksum, (const guchar *)"\1", 1);
+  else
+    g_checksum_update (checksum, (const guchar *)"\0", 1);
+}
+
+void
+builder_checksum_uint32 (GChecksum *checksum,
+                         guint32 val)
+{
+  guchar v[4];
+  v[0] = (val >> 0) & 0xff;
+  v[1] = (val >> 8) & 0xff;
+  v[1] = (val >> 16) & 0xff;
+  v[1] = (val >> 24) & 0xff;
+  g_checksum_update (checksum, v, 4);
 }

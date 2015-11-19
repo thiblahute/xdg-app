@@ -34,6 +34,9 @@ typedef struct BuilderModule BuilderModule;
 #define BUILDER_MODULE(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), BUILDER_TYPE_MODULE, BuilderModule))
 #define BUILDER_IS_MODULE(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), BUILDER_TYPE_MODULE))
 
+/* Bump this if format changes in incompatible ways to force rebuild */
+#define BUILDER_MODULE_CHECKSUM_VERSION "1"
+
 GType builder_module_get_type (void);
 
 const char * builder_module_get_name    (BuilderModule  *self);
@@ -49,6 +52,10 @@ gboolean builder_module_extract_sources  (BuilderModule   *self,
 gboolean builder_module_build            (BuilderModule   *self,
                                           BuilderContext  *context,
                                           GError         **error);
+
+void     builder_module_checksum         (BuilderModule  *self,
+                                          GChecksum      *checksum,
+                                          BuilderContext *context);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(BuilderModule, g_object_unref)
 

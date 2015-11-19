@@ -31,6 +31,7 @@
 #include "libglnx/libglnx.h"
 #include "libgsystem.h"
 
+#include "builder-utils.h"
 #include "builder-module.h"
 
 struct BuilderModule {
@@ -533,4 +534,24 @@ builder_module_build (BuilderModule *self,
     return FALSE;
 
   return TRUE;
+}
+
+void
+builder_module_checksum (BuilderModule  *self,
+                         GChecksum      *checksum,
+                         BuilderContext *context)
+{
+  GList *l;
+
+  builder_checksum_str (checksum, BUILDER_MODULE_CHECKSUM_VERSION);
+  builder_checksum_str (checksum, self->name);
+  builder_checksum_strv (checksum, self->config_opts);
+  builder_checksum_boolean (checksum, self->rm_configure);
+
+  for (l = self->sources; l != NULL; l = l->next)
+    {
+      BuilderSource *source = l->data;
+
+      builder_source_checksum (source, checksum, context);
+    }
 }

@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <sys/statfs.h>
 
+#include "builder-utils.h"
 #include "builder-source-file.h"
 
 struct BuilderSourceFile {
@@ -178,6 +179,24 @@ builder_source_file_extract (BuilderSource *source,
 }
 
 static void
+builder_source_file_checksum (BuilderSource  *source,
+                              GChecksum      *checksum,
+                              BuilderContext *context)
+{
+  BuilderSourceFile *self = BUILDER_SOURCE_FILE (source);
+  g_autoptr(GFile) src = NULL;
+  g_autofree char *data = NULL;
+  gsize len;
+
+  src = get_source_file (self, context, NULL);
+  if (src == NULL)
+    return;
+
+  if (g_file_load_contents (src, NULL, &data, &len, NULL, NULL))
+    g_checksum_update (checksum, (guchar *)data, len);
+}
+
+static void
 builder_source_file_class_init (BuilderSourceFileClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
@@ -189,6 +208,7 @@ builder_source_file_class_init (BuilderSourceFileClass *klass)
 
   source_class->download = builder_source_file_download;
   source_class->extract = builder_source_file_extract;
+  source_class->checksum = builder_source_file_checksum;
 
   g_object_class_install_property (object_class,
                                    PROP_PATH,

@@ -52,6 +52,9 @@ typedef struct {
                         GFile *dest,
                         BuilderContext *context,
                         GError **error);
+  void     (* checksum) (BuilderSource *self,
+                         GChecksum      *checksum,
+                         BuilderContext *context);
 } BuilderSourceClass;
 
 GType builder_source_get_type (void);
@@ -66,6 +69,9 @@ gboolean builder_source_extract  (BuilderSource *self,
                                   BuilderContext *context,
                                   GError **error);
 
+void     builder_source_checksum (BuilderSource  *self,
+                                  GChecksum      *checksum,
+                                  BuilderContext *context);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(BuilderSource, g_object_unref)
 

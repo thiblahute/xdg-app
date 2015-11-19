@@ -28,6 +28,7 @@
 #include <sys/statfs.h>
 
 #include "builder-manifest.h"
+#include "builder-utils.h"
 
 struct BuilderManifest {
   GObject parent;
@@ -371,6 +372,22 @@ builder_manifest_init_app_dir (BuilderManifest *self,
     return FALSE;
 
   return TRUE;
+}
+
+/* This gets the checksum of everything that globally affects the build */
+void
+builder_manifest_checksum (BuilderManifest *self,
+                           GChecksum *checksum,
+                           BuilderContext *context)
+{
+  builder_checksum_str (checksum, BUILDER_MANIFEST_CHECKSUM_VERSION);
+  builder_checksum_str (checksum, self->app_id);
+  /* No need to include version here, it doesn't affect the build */
+  builder_checksum_str (checksum, self->runtime);
+  builder_checksum_str (checksum, builder_manifest_get_runtime_version (self));
+  builder_checksum_str (checksum, self->sdk);
+  if (self->build_options)
+    builder_options_checksum (self->build_options, checksum, context);
 }
 
 gboolean

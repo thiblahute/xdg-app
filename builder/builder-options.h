@@ -32,6 +32,9 @@ typedef struct BuilderOptions BuilderOptions;
 #define BUILDER_OPTIONS(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), BUILDER_TYPE_OPTIONS, BuilderOptions))
 #define BUILDER_IS_OPTIONS(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), BUILDER_TYPE_OPTIONS))
 
+/* Bump this if format changes in incompatible ways to force rebuild */
+#define BUILDER_OPTION_CHECKSUM_VERSION "1"
+
 GType builder_options_get_type (void);
 
 const char *builder_options_get_cflags   (BuilderOptions *self,
@@ -39,6 +42,9 @@ const char *builder_options_get_cflags   (BuilderOptions *self,
 const char *builder_options_get_cxxflags (BuilderOptions *self,
                                           BuilderContext *context);
 char **     builder_options_get_env      (BuilderOptions *self,
+                                          BuilderContext *context);
+void        builder_options_checksum     (BuilderOptions *self,
+                                          GChecksum      *checksum,
                                           BuilderContext *context);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(BuilderOptions, g_object_unref)

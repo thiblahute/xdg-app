@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <sys/statfs.h>
 
+#include "builder-utils.h"
 #include "builder-source.h"
 #include "builder-source-tar.h"
 #include "builder-source-git.h"
@@ -203,4 +204,18 @@ builder_source_extract  (BuilderSource *self,
 
 
   return class->extract (self, real_dest, context, error);
+}
+
+void
+builder_source_checksum (BuilderSource  *self,
+                         GChecksum      *checksum,
+                         BuilderContext *context)
+{
+  BuilderSourceClass *class;
+
+  class = BUILDER_SOURCE_GET_CLASS (self);
+
+  builder_checksum_str (checksum, self->dest);
+
+  class->checksum (self, checksum, context);
 }

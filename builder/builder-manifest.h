@@ -34,6 +34,9 @@ typedef struct BuilderManifest BuilderManifest;
 #define BUILDER_MANIFEST(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), BUILDER_TYPE_MANIFEST, BuilderManifest))
 #define BUILDER_IS_MANIFEST(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), BUILDER_TYPE_MANIFEST))
 
+/* Bump this if format changes in incompatible ways to force rebuild */
+#define BUILDER_MANIFEST_CHECKSUM_VERSION "1"
+
 GType builder_manifest_get_type (void);
 
 const char *    builder_manifest_get_app_id        (BuilderManifest  *self);
@@ -49,6 +52,9 @@ gboolean        builder_manifest_download          (BuilderManifest  *self,
 gboolean        builder_manifest_build             (BuilderManifest  *self,
                                                     BuilderContext   *context,
                                                     GError          **error);
+void            builder_manifest_checksum          (BuilderManifest *self,
+                                                    GChecksum *checksum,
+                                                    BuilderContext *context);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(BuilderManifest, g_object_unref)
 

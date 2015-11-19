@@ -27,6 +27,8 @@
 #include <stdlib.h>
 #include <sys/statfs.h>
 
+#include "builder-utils.h"
+
 #include "builder-source-git.h"
 #include "builder-utils.h"
 
@@ -261,7 +263,6 @@ get_mirror_dir (BuilderSourceGit *self, BuilderContext *context)
   return g_file_get_child (git_dir, filename);
 }
 
-/*
 static char *
 get_current_commit (BuilderSourceGit *self, BuilderContext *context, GError **error)
 {
@@ -276,7 +277,6 @@ get_current_commit (BuilderSourceGit *self, BuilderContext *context, GError **er
 
   return output;
 }
-*/
 
 static gboolean
 builder_source_git_download (BuilderSource *source,
@@ -345,6 +345,21 @@ builder_source_git_extract (BuilderSource *source,
   return TRUE;
 }
 
+static void
+builder_source_git_checksum (BuilderSource  *source,
+                             GChecksum      *checksum,
+                             BuilderContext *context)
+{
+  BuilderSourceGit *self = BUILDER_SOURCE_GIT (source);
+  g_autofree char *current_commit;
+
+  builder_checksum_str (checksum, self->url);
+  builder_checksum_str (checksum, self->branch);
+
+  current_commit = get_current_commit (self, context, NULL);
+  if (current_commit)
+    builder_checksum_str (checksum, current_commit);
+}
 
 static void
 builder_source_git_class_init (BuilderSourceGitClass *klass)
@@ -358,6 +373,7 @@ builder_source_git_class_init (BuilderSourceGitClass *klass)
 
   source_class->download = builder_source_git_download;
   source_class->extract = builder_source_git_extract;
+  source_class->checksum = builder_source_git_checksum;
 
   g_object_class_install_property (object_class,
                                    PROP_URL,

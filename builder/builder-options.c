@@ -24,11 +24,13 @@
 #include <string.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include <sys/statfs.h>
 
 #include "builder-options.h"
 #include "builder-context.h"
+#include "builder-utils.h"
 
 struct BuilderOptions {
   GObject parent;
@@ -374,4 +376,21 @@ builder_options_get_env (BuilderOptions *self, BuilderContext *context)
     }
 
   return envp;
+}
+
+void
+builder_options_checksum (BuilderOptions *self,
+                          GChecksum      *checksum,
+                          BuilderContext *context)
+{
+  BuilderOptions *arch_options;
+
+  builder_checksum_str (checksum, BUILDER_OPTION_CHECKSUM_VERSION);
+  builder_checksum_str (checksum, self->cflags);
+  builder_checksum_str (checksum, self->cxxflags);
+  builder_checksum_strv (checksum, self->env);
+
+  arch_options = g_hash_table_lookup (self->arch, builder_context_get_arch (context));
+  if (arch_options)
+    builder_options_checksum (arch_options, checksum, context);
 }

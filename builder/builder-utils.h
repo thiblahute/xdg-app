@@ -29,6 +29,10 @@ G_BEGIN_DECLS
 typedef struct BuilderUtils BuilderUtils;
 
 char *builder_uri_to_filename (const char *uri);
+void builder_checksum_str (GChecksum *checksum, const char *str);
+void builder_checksum_strv (GChecksum *checksum, char **strv);
+void builder_checksum_boolean (GChecksum *checksum, gboolean val);
+void builder_checksum_uint32 (GChecksum *checksum, guint32 val);
 
 G_END_DECLS
 

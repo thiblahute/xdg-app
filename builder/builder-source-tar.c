@@ -29,6 +29,7 @@
 
 #include "xdg-app-utils.h"
 
+#include "builder-utils.h"
 #include "builder-source-tar.h"
 
 struct BuilderSourceTar {
@@ -326,6 +327,19 @@ builder_source_tar_extract (BuilderSource *source,
 }
 
 static void
+builder_source_tar_checksum (BuilderSource  *source,
+                             GChecksum      *checksum,
+                             BuilderContext *context)
+{
+  BuilderSourceTar *self = BUILDER_SOURCE_TAR (source);
+
+  builder_checksum_str (checksum, self->url);
+  builder_checksum_str (checksum, self->checksum);
+  builder_checksum_uint32 (checksum, self->strip_components);
+}
+
+
+static void
 builder_source_tar_class_init (BuilderSourceTarClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
@@ -337,6 +351,7 @@ builder_source_tar_class_init (BuilderSourceTarClass *klass)
 
   source_class->download = builder_source_tar_download;
   source_class->extract = builder_source_tar_extract;
+  source_class->checksum = builder_source_tar_checksum;
 
   g_object_class_install_property (object_class,
                                    PROP_URL,
