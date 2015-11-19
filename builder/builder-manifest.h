@@ -25,6 +25,7 @@
 
 #include "builder-options.h"
 #include "builder-module.h"
+#include "builder-cache.h"
 
 G_BEGIN_DECLS
 
@@ -50,6 +51,7 @@ gboolean        builder_manifest_download          (BuilderManifest  *self,
                                                     BuilderContext   *context,
                                                     GError          **error);
 gboolean        builder_manifest_build             (BuilderManifest  *self,
+                                                    BuilderCache     *cache,
                                                     BuilderContext   *context,
                                                     GError          **error);
 void            builder_manifest_checksum          (BuilderManifest *self,

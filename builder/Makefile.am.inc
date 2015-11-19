@@ -20,6 +20,8 @@ xdg_app_builder_SOURCES = \
 	builder/builder-source-file.h \
 	builder/builder-context.c \
 	builder/builder-context.h \
+	builder/builder-cache.c \
+	builder/builder-cache.h \
 	builder/builder-utils.c \
 	builder/builder-utils.h \
 	$(NULL)

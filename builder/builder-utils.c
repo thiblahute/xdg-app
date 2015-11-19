@@ -97,7 +97,7 @@ builder_checksum_uint32 (GChecksum *checksum,
   guchar v[4];
   v[0] = (val >> 0) & 0xff;
   v[1] = (val >> 8) & 0xff;
-  v[1] = (val >> 16) & 0xff;
-  v[1] = (val >> 24) & 0xff;
+  v[2] = (val >> 16) & 0xff;
+  v[3] = (val >> 24) & 0xff;
   g_checksum_update (checksum, v, 4);
 }

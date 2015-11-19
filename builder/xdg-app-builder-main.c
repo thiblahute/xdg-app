@@ -75,6 +75,9 @@ main (int    argc,
   g_autoptr(BuilderContext) build_context = NULL;
   g_autoptr(GFile) base_dir = NULL;
   g_autoptr(GFile) app_dir = NULL;
+  g_autoptr(GFile) cache_dir = NULL;
+  g_autoptr(BuilderCache) cache = NULL;
+  g_autofree char *cache_branch = NULL;
 
   setlocale (LC_ALL, "");
 
@@ -143,13 +146,40 @@ main (int    argc,
       return 1;
     }
 
-  if (!builder_manifest_init_app_dir (manifest, build_context, &error))
+  cache_dir = g_file_get_child (base_dir, ".buildcache");
+  cache_branch = g_path_get_basename (manifest_path);
+
+  cache = builder_cache_new (cache_dir, app_dir, cache_branch);
+  if (!builder_cache_open (cache, &error))
     {
-      g_print ("error: %s\n", error->message);
+      g_print ("Error opening cache: %s\n", error->message);
       return 1;
     }
 
-  if (!builder_manifest_build (manifest, build_context, &error))
+  builder_manifest_checksum (manifest,
+                             builder_cache_get_checksum (cache),
+                             build_context);
+
+
+  if (!builder_cache_lookup (cache))
+    {
+      g_autofree char *body =
+        g_strdup_printf ("Initialized %s\n",
+                         builder_manifest_get_app_id (manifest));
+      if (!builder_manifest_init_app_dir (manifest, build_context, &error))
+        {
+          g_print ("error: %s\n", error->message);
+          return 1;
+        }
+
+      if (!builder_cache_commit (cache, body, &error))
+        {
+          g_print ("error: %s\n", error->message);
+          return 1;
+        }
+    }
+
+  if (!builder_manifest_build (manifest, cache, build_context, &error))
     {
       g_print ("error: %s\n", error->message);
       return 1;

@@ -411,6 +411,7 @@ builder_manifest_download (BuilderManifest *self,
 
 gboolean
 builder_manifest_build (BuilderManifest *self,
+                        BuilderCache     *cache,
                         BuilderContext *context,
                         GError **error)
 {
@@ -422,8 +423,20 @@ builder_manifest_build (BuilderManifest *self,
   for (l = self->modules; l != NULL; l = l->next)
     {
       BuilderModule *m = l->data;
-      if (!builder_module_build (m, context, error))
-        return FALSE;
+
+      builder_module_checksum (m, builder_cache_get_checksum (cache), context);
+
+      if (!builder_cache_lookup (cache))
+        {
+          g_autofree char *body =
+            g_strdup_printf ("Built %s\n", builder_module_get_name (m));
+          if (!builder_module_build (m, context, error))
+            return FALSE;
+          if (!builder_cache_commit (cache, body, error))
+            return FALSE;
+        }
+          g_print ("Cache hit for %s, skipping build\n",
+                   builder_module_get_name (m));
     }
   return TRUE;
 }
