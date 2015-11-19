@@ -137,13 +137,13 @@ main (int    argc,
 
   build_context = builder_context_new (base_dir, app_dir);
 
-  if (!builder_manifest_init_app_dir (manifest, build_context, &error))
+  if (!builder_manifest_download (manifest, build_context, &error))
     {
       g_print ("error: %s\n", error->message);
       return 1;
     }
 
-  if (!builder_manifest_download (manifest, build_context, &error))
+  if (!builder_manifest_init_app_dir (manifest, build_context, &error))
     {
       g_print ("error: %s\n", error->message);
       return 1;
