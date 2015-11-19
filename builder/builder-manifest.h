@@ -36,14 +36,19 @@ typedef struct BuilderManifest BuilderManifest;
 
 GType builder_manifest_get_type (void);
 
-const char *    builder_manifest_get_app_id  (BuilderManifest *self);
-BuilderOptions *builder_manifest_get_build_options (BuilderManifest *self);
-GList *         builder_manifest_get_modules (BuilderManifest *self);
+const char *    builder_manifest_get_app_id        (BuilderManifest  *self);
+BuilderOptions *builder_manifest_get_build_options (BuilderManifest  *self);
+GList *         builder_manifest_get_modules       (BuilderManifest  *self);
 
-gboolean        builder_manifest_build (BuilderManifest *self,
-                                        BuilderContext *context,
-                                        GError **error);
-
+gboolean        builder_manifest_init_app_dir      (BuilderManifest  *self,
+                                                    BuilderContext   *context,
+                                                    GError          **error);
+gboolean        builder_manifest_download          (BuilderManifest  *self,
+                                                    BuilderContext   *context,
+                                                    GError          **error);
+gboolean        builder_manifest_build             (BuilderManifest  *self,
+                                                    BuilderContext   *context,
+                                                    GError          **error);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(BuilderManifest, g_object_unref)
 

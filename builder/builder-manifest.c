@@ -315,13 +315,70 @@ builder_manifest_get_modules (BuilderManifest *self)
   return self->modules;
 }
 
+static const char *
+builder_manifest_get_runtime_version (BuilderManifest *self)
+{
+  return self->runtime_version ? self->runtime_version : "master";
+}
+
 gboolean
-builder_manifest_build (BuilderManifest *self,
-                        BuilderContext *context,
-                        GError **error)
+builder_manifest_init_app_dir (BuilderManifest *self,
+                               BuilderContext *context,
+                               GError **error)
+{
+  g_autoptr(GFile) app_dir = builder_context_get_app_dir (context);
+  g_autofree char *app_dir_path = g_file_get_path (app_dir);
+  g_autoptr(GSubprocessLauncher) launcher = NULL;
+  g_autoptr(GSubprocess) subp = NULL;
+  g_autofree char *cwd = NULL;
+  g_autoptr(GPtrArray) args = NULL;
+
+  if (self->app_id == NULL)
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                   "app id not specified");
+      return NULL;
+    }
+
+  if (self->runtime == NULL)
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                   "runtime not specified");
+      return NULL;
+    }
+
+  if (self->sdk == NULL)
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                   "sdk not specified");
+      return NULL;
+    }
+
+  subp =
+    g_subprocess_new (G_SUBPROCESS_FLAGS_NONE,
+                      error,
+                      "xdg-app",
+                      "build-init",
+                      app_dir_path,
+                      self->app_id,
+                      self->sdk,
+                      self->runtime,
+                      builder_manifest_get_runtime_version (self),
+                      NULL);
+
+  if (subp == NULL ||
+      !g_subprocess_wait_check (subp, NULL, error))
+    return FALSE;
+
+  return TRUE;
+}
+
+gboolean
+builder_manifest_download (BuilderManifest *self,
+                           BuilderContext *context,
+                           GError **error)
 {
   GList *l;
-  builder_context_set_options (context, self->build_options);
 
   g_print ("Downloading sources\n");
   for (l = self->modules; l != NULL; l = l->next)
@@ -331,6 +388,18 @@ builder_manifest_build (BuilderManifest *self,
       if (! builder_module_download_sources (m, context, error))
         return FALSE;
     }
+
+  return TRUE;
+}
+
+gboolean
+builder_manifest_build (BuilderManifest *self,
+                        BuilderContext *context,
+                        GError **error)
+{
+  GList *l;
+
+  builder_context_set_options (context, self->build_options);
 
   g_print ("Starting build of %s\n", self->app_id ? self->app_id : "app");
   for (l = self->modules; l != NULL; l = l->next)

@@ -54,6 +54,15 @@ message_handler (const gchar *log_domain,
 }
 
 int
+usage (GOptionContext *context, const char *message)
+{
+  g_autofree gchar *help = g_option_context_get_help (context, TRUE, NULL);
+  g_printerr ("%s\n", message);
+  g_printerr ("%s", help);
+  return 1;
+}
+
+int
 main (int    argc,
       char **argv)
 {
@@ -61,6 +70,7 @@ main (int    argc,
   g_autoptr(GError) error = NULL;
   g_autoptr(BuilderManifest) manifest = NULL;
   GOptionContext *context;
+  const char *app_dir_path, *manifest_path;
   g_autofree gchar *json = NULL;
   g_autoptr(BuilderContext) build_context = NULL;
   g_autoptr(GFile) base_dir = NULL;
@@ -81,7 +91,7 @@ main (int    argc,
   else
     g_unsetenv ("GIO_USE_VFS");
 
-  context = g_option_context_new ("- application builder helper");
+  context = g_option_context_new ("DIRECTORY MANIFEST - Build manifest");
   g_option_context_add_main_entries (context, entries, NULL);
   if (!g_option_context_parse (context, &argc, &argv, &error))
     {
@@ -92,29 +102,52 @@ main (int    argc,
   if (opt_verbose)
     g_log_set_handler (NULL, G_LOG_LEVEL_DEBUG, message_handler, NULL);
 
-  if (argc < 2)
+  if (argc == 1)
+    return usage (context, "DIRECTORY must be specified");
+
+  app_dir_path = argv[1];
+
+  if (argc == 2)
+    return usage (context, "MANIFEST must be specified");
+
+  manifest_path = argv[2];
+
+  if (!g_file_get_contents (manifest_path, &json, NULL, &error))
     {
-      g_printerr ("No filename");
+      g_printerr ("Can't load '%s': %s\n", manifest_path, error->message);
       return 1;
     }
 
-  if (!g_file_get_contents (argv[1],
-                            &json, NULL, &error))
-    {
-      g_printerr ("Can't parse json: %s\n", error->message);
-      return 1;
-    }
-
-  manifest = (BuilderManifest *)json_gobject_from_data (BUILDER_TYPE_MANIFEST, json, -1, &error);
+  manifest = (BuilderManifest *)json_gobject_from_data (BUILDER_TYPE_MANIFEST,
+                                                        json, -1, &error);
   if (manifest == NULL)
     {
-      g_printerr ("Can't parse manifest: %s\n", error->message);
+      g_printerr ("Can't parse '%s': %s\n", manifest_path, error->message);
       return 1;
     }
 
   base_dir = g_file_new_for_path (g_get_current_dir ());
-  app_dir = g_file_get_child (base_dir, "app");
+  app_dir = g_file_new_for_path (app_dir_path);
+
+  if (!gs_shutil_rm_rf (app_dir, NULL, &error))
+    {
+      g_print ("error removing old app dir '%s': %s\n", app_dir_path, error->message);
+      return 1;
+    }
+
   build_context = builder_context_new (base_dir, app_dir);
+
+  if (!builder_manifest_init_app_dir (manifest, build_context, &error))
+    {
+      g_print ("error: %s\n", error->message);
+      return 1;
+    }
+
+  if (!builder_manifest_download (manifest, build_context, &error))
+    {
+      g_print ("error: %s\n", error->message);
+      return 1;
+    }
 
   if (!builder_manifest_build (manifest, build_context, &error))
     {
