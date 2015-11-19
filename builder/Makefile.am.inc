@@ -18,6 +18,8 @@ xdg_app_builder_SOURCES = \
 	builder/builder-source-git.h \
 	builder/builder-source-file.c \
 	builder/builder-source-file.h \
+	builder/builder-source-patch.c \
+	builder/builder-source-patch.h \
 	builder/builder-context.c \
 	builder/builder-context.h \
 	builder/builder-cache.c \

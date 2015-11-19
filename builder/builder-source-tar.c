@@ -314,13 +314,15 @@ builder_source_tar_extract (BuilderSource *source,
   BuilderSourceTar *self = BUILDER_SOURCE_TAR (source);
   g_autoptr(GFile) tarfile = NULL;
   g_autofree char *tar_path = NULL;
+  g_autofree char *strip_components = NULL;
 
   tarfile = get_download_location (self, context, error);
   if (tarfile == NULL)
     return FALSE;
 
+  strip_components = g_strdup_printf ("--strip-components=%u", self->strip_components);
   tar_path = g_file_get_path (tarfile);
-  if (!tar (dest, error, "xf", tar_path, "--strip-components=1", NULL))
+  if (!tar (dest, error, "xf", tar_path, strip_components, NULL))
     return FALSE;
 
   return TRUE;

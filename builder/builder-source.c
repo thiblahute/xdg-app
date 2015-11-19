@@ -30,6 +30,7 @@
 #include "builder-utils.h"
 #include "builder-source.h"
 #include "builder-source-tar.h"
+#include "builder-source-patch.h"
 #include "builder-source-git.h"
 #include "builder-source-file.h"
 
@@ -160,6 +161,8 @@ builder_source_from_json (JsonNode *node)
     return (BuilderSource *)json_gobject_deserialize (BUILDER_TYPE_SOURCE_GIT, node);
   if (strcmp (type, "file") == 0)
     return (BuilderSource *)json_gobject_deserialize (BUILDER_TYPE_SOURCE_FILE, node);
+  if (strcmp (type, "patch") == 0)
+    return (BuilderSource *)json_gobject_deserialize (BUILDER_TYPE_SOURCE_PATCH, node);
   else if (type == NULL)
     g_warning ("Missing source type");
   else

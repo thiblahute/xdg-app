@@ -194,6 +194,9 @@ builder_source_file_checksum (BuilderSource  *source,
 
   if (g_file_load_contents (src, NULL, &data, &len, NULL, NULL))
     g_checksum_update (checksum, (guchar *)data, len);
+
+  builder_checksum_str (checksum, self->path);
+  builder_checksum_str (checksum, self->dest_filename);
 }
 
 static void
