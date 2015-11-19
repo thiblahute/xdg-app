@@ -47,8 +47,6 @@ gboolean builder_module_extract_sources  (BuilderModule   *self,
                                           BuilderContext  *context,
                                           GError         **error);
 gboolean builder_module_build            (BuilderModule   *self,
-                                          GFile           *app_dir,
-                                          GFile           *source_dir,
                                           BuilderContext  *context,
                                           GError         **error);
 

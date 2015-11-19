@@ -33,6 +33,7 @@
 struct BuilderContext {
   GObject parent;
 
+  GFile *app_dir;
   GFile *base_dir;
   SoupSession *soup_session;
   char *arch;
@@ -48,6 +49,7 @@ G_DEFINE_TYPE (BuilderContext, builder_context, G_TYPE_OBJECT);
 
 enum {
   PROP_0,
+  PROP_APP_DIR,
   PROP_BASE_DIR,
   LAST_PROP
 };
@@ -58,6 +60,7 @@ builder_context_finalize (GObject *object)
 {
   BuilderContext *self = (BuilderContext *)object;
 
+  g_clear_object (&self->app_dir);
   g_clear_object (&self->base_dir);
   g_clear_object (&self->soup_session);
   g_clear_object (&self->options);
@@ -80,6 +83,10 @@ builder_context_get_property (GObject    *object,
       g_value_set_object (value, self->base_dir);
       break;
 
+    case PROP_APP_DIR:
+      g_value_set_object (value, self->app_dir);
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
     }
@@ -99,6 +106,10 @@ builder_context_set_property (GObject      *object,
       g_set_object (&self->base_dir, g_value_get_object (value));
       break;
 
+    case PROP_APP_DIR:
+      g_set_object (&self->app_dir, g_value_get_object (value));
+      break;
+
    default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
     }
@@ -113,6 +124,13 @@ builder_context_class_init (BuilderContextClass *klass)
   object_class->get_property = builder_context_get_property;
   object_class->set_property = builder_context_set_property;
 
+  g_object_class_install_property (object_class,
+                                   PROP_APP_DIR,
+                                   g_param_spec_object ("app-dir",
+                                                        "",
+                                                        "",
+                                                        G_TYPE_FILE,
+                                                        G_PARAM_READWRITE|G_PARAM_CONSTRUCT));
   g_object_class_install_property (object_class,
                                    PROP_BASE_DIR,
                                    g_param_spec_object ("base-dir",
@@ -131,6 +149,12 @@ GFile *
 builder_context_get_base_dir (BuilderContext  *self)
 {
   return g_object_ref (self->base_dir);
+}
+
+GFile *
+builder_context_get_app_dir (BuilderContext  *self)
+{
+  return g_object_ref (self->app_dir);
 }
 
 GFile *
@@ -203,9 +227,11 @@ builder_context_get_n_cpu (BuilderContext *self)
 }
 
 BuilderContext *
-builder_context_new (GFile *base_dir)
+builder_context_new (GFile *base_dir,
+                     GFile *app_dir)
 {
   return g_object_new (BUILDER_TYPE_CONTEXT,
                        "base-dir", base_dir,
+                       "app-dir", app_dir,
                        NULL);
 }

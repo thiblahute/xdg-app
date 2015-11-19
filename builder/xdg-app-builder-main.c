@@ -60,12 +60,11 @@ main (int    argc,
   g_autofree const char *old_env = NULL;
   g_autoptr(GError) error = NULL;
   g_autoptr(BuilderManifest) manifest = NULL;
-  BuilderOptions *options;
   GOptionContext *context;
-  GList *modules, *l;
   g_autofree gchar *json = NULL;
   g_autoptr(BuilderContext) build_context = NULL;
-  g_autoptr(GFile) basedir = NULL;;
+  g_autoptr(GFile) base_dir = NULL;
+  g_autoptr(GFile) app_dir = NULL;
 
   setlocale (LC_ALL, "");
 
@@ -109,63 +108,18 @@ main (int    argc,
   manifest = (BuilderManifest *)json_gobject_from_data (BUILDER_TYPE_MANIFEST, json, -1, &error);
   if (manifest == NULL)
     {
-      g_printerr ("Can't deserialize manifest: %s\n", error->message);
+      g_printerr ("Can't parse manifest: %s\n", error->message);
       return 1;
     }
 
-  basedir = g_file_new_for_path (g_get_current_dir ());
-  build_context = builder_context_new (basedir);
+  base_dir = g_file_new_for_path (g_get_current_dir ());
+  app_dir = g_file_get_child (base_dir, "app");
+  build_context = builder_context_new (base_dir, app_dir);
 
-  g_print ("app id %s\n", builder_manifest_get_app_id (manifest));
-  options = builder_manifest_get_build_options (manifest);
-  g_print ("options %p\n", options);
-  builder_context_set_options (build_context, options);
-  modules = builder_manifest_get_modules (manifest);
-  g_print ("modules\n");
-  for (l = modules; l != NULL; l = l->next)
+  if (!builder_manifest_build (manifest, build_context, &error))
     {
-      BuilderModule *m = l->data;
-      const char *name = builder_module_get_name (m);
-      g_autofree char *buildname = g_strdup_printf ("build-%s", name);
-      g_autoptr(GFile) base_dir = builder_context_get_base_dir (build_context);
-      g_autoptr(GFile) app_dir = g_file_get_child (base_dir, "app");
-      g_autoptr(GFile) source_dir = g_file_get_child (base_dir, buildname);
-      g_print ("  Module '%s'\n", name);
-      g_print ("    downloading sources\n");
-      if (! builder_module_download_sources (m, build_context, &error))
-        {
-          g_print ("error: %s\n", error->message);
-          return 1;
-        }
-
-      if (!gs_shutil_rm_rf (source_dir, NULL, &error))
-        {
-          g_print ("rm error: %s\n", error->message);
-          return 1;
-        }
-
-      if (!g_file_make_directory_with_parents (source_dir, NULL, &error))
-        {
-          g_print ("mkdir error: %s\n", error->message);
-          return 1;
-        }
-
-      g_print ("    extracting sources to %s\n", buildname);
-      if (!builder_module_extract_sources (m, source_dir, build_context, &error))
-        {
-          g_print ("extract error: %s\n", error->message);
-          return 1;
-        }
-
-      if (!builder_module_build (m,
-                                 app_dir,
-                                 source_dir,
-                                 build_context,
-                                 &error))
-        {
-          g_print ("build error: %s\n", error->message);
-          return 1;
-        }
+      g_print ("error: %s\n", error->message);
+      return 1;
     }
 
   return 0;

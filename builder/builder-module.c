@@ -27,6 +27,10 @@
 #include <stdlib.h>
 #include <sys/statfs.h>
 
+#include <gio/gio.h>
+#include "libglnx/libglnx.h"
+#include "libgsystem.h"
+
 #include "builder-module.h"
 
 struct BuilderModule {
@@ -383,19 +387,18 @@ build (GFile *app_dir,
   return TRUE;
 }
 
-
 gboolean
 builder_module_build (BuilderModule *self,
-                      GFile *app_dir,
-                      GFile *source_dir,
                       BuilderContext *context,
                       GError **error)
 {
+  g_autoptr(GFile) app_dir = builder_context_get_app_dir (context);
+  g_autoptr(GFile) base_dir = builder_context_get_base_dir (context);
   g_autofree char *make_j = NULL;
   g_autofree char *make_l = NULL;
   g_autofree char *configure_content = NULL;
   g_autofree char *makefile_content = NULL;
-  g_autoptr(GFile) configure_file = g_file_get_child (source_dir, "configure");
+  g_autoptr(GFile) configure_file = NULL;
   const char *makefile_names[] =  {"Makefile", "makefile", "GNUmakefile", NULL};
   g_autoptr(GFile) build_dir = NULL;
   const char *configure_cmd;
@@ -406,6 +409,24 @@ builder_module_build (BuilderModule *self,
   int i;
   g_auto(GStrv) env = NULL;
   const char *cflags, *cxxflags;
+  g_autofree char *buildname = NULL;
+  g_autoptr(GFile) source_dir = NULL;
+  g_autofree char *source_dir_path = NULL;
+
+  buildname = g_strdup_printf ("build-%s", self->name);
+  source_dir = g_file_get_child (base_dir, buildname);
+
+  source_dir_path = g_file_get_path (source_dir);
+  g_print ("Building module %s in %s\n", self->name, source_dir_path);
+
+  if (!gs_shutil_rm_rf (source_dir, NULL, error))
+    return FALSE;
+
+  if (!g_file_make_directory_with_parents (source_dir, NULL, error))
+    return FALSE;
+
+  if (!builder_module_extract_sources (self, source_dir, context, error))
+    return FALSE;
 
   env = builder_options_get_env (self->build_options, context);
 
@@ -416,6 +437,8 @@ builder_module_build (BuilderModule *self,
   cxxflags = builder_options_get_cflags (self->build_options, context);
   if (cxxflags)
     env = g_environ_setenv (env, "CXXFLAGS", cflags, TRUE);
+
+  configure_file = g_file_get_child (source_dir, "configure");
 
   if (self->rm_configure)
     {

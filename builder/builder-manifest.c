@@ -33,6 +33,10 @@ struct BuilderManifest {
   GObject parent;
 
   char *app_id;
+  char *version;
+  char *runtime;
+  char *runtime_version;
+  char *sdk;
   BuilderOptions *build_options;
   GList *modules;
 };
@@ -49,6 +53,10 @@ G_DEFINE_TYPE_WITH_CODE (BuilderManifest, builder_manifest, G_TYPE_OBJECT,
 enum {
   PROP_0,
   PROP_APP_ID,
+  PROP_VERSION,
+  PROP_RUNTIME,
+  PROP_RUNTIME_VERSION,
+  PROP_SDK,
   PROP_BUILD_OPTIONS,
   PROP_MODULES,
   LAST_PROP
@@ -61,6 +69,10 @@ builder_manifest_finalize (GObject *object)
   BuilderManifest *self = (BuilderManifest *)object;
 
   g_free (self->app_id);
+  g_free (self->version);
+  g_free (self->runtime);
+  g_free (self->runtime_version);
+  g_free (self->sdk);
   g_clear_object (&self->build_options);
   g_list_free_full (self->modules, g_object_unref);
 
@@ -79,6 +91,22 @@ builder_manifest_get_property (GObject    *object,
     {
     case PROP_APP_ID:
       g_value_set_string (value, self->app_id);
+      break;
+
+    case PROP_VERSION:
+      g_value_set_string (value, self->version);
+      break;
+
+    case PROP_RUNTIME:
+      g_value_set_string (value, self->runtime);
+      break;
+
+    case PROP_RUNTIME_VERSION:
+      g_value_set_string (value, self->runtime_version);
+      break;
+
+    case PROP_SDK:
+      g_value_set_string (value, self->sdk);
       break;
 
     case PROP_BUILD_OPTIONS:
@@ -109,6 +137,26 @@ builder_manifest_set_property (GObject       *object,
       self->app_id = g_value_dup_string (value);
       break;
 
+    case PROP_VERSION:
+      g_free (self->version);
+      self->version = g_value_dup_string (value);
+      break;
+
+    case PROP_RUNTIME:
+      g_free (self->runtime);
+      self->runtime = g_value_dup_string (value);
+      break;
+
+    case PROP_RUNTIME_VERSION:
+      g_free (self->runtime_version);
+      self->runtime_version = g_value_dup_string (value);
+      break;
+
+    case PROP_SDK:
+      g_free (self->sdk);
+      self->sdk = g_value_dup_string (value);
+      break;
+
     case PROP_BUILD_OPTIONS:
       g_set_object (&self->build_options,  g_value_get_object (value));
       break;
@@ -136,6 +184,34 @@ builder_manifest_class_init (BuilderManifestClass *klass)
   g_object_class_install_property (object_class,
                                    PROP_APP_ID,
                                    g_param_spec_string ("app-id",
+                                                        "",
+                                                        "",
+                                                        NULL,
+                                                        G_PARAM_READWRITE));
+  g_object_class_install_property (object_class,
+                                   PROP_VERSION,
+                                   g_param_spec_string ("version",
+                                                        "",
+                                                        "",
+                                                        NULL,
+                                                        G_PARAM_READWRITE));
+  g_object_class_install_property (object_class,
+                                   PROP_RUNTIME,
+                                   g_param_spec_string ("runtime",
+                                                        "",
+                                                        "",
+                                                        NULL,
+                                                        G_PARAM_READWRITE));
+  g_object_class_install_property (object_class,
+                                   PROP_RUNTIME_VERSION,
+                                   g_param_spec_string ("runtime-version",
+                                                        "",
+                                                        "",
+                                                        NULL,
+                                                        G_PARAM_READWRITE));
+  g_object_class_install_property (object_class,
+                                   PROP_SDK,
+                                   g_param_spec_string ("sdk",
                                                         "",
                                                         "",
                                                         NULL,
@@ -237,4 +313,31 @@ GList *
 builder_manifest_get_modules (BuilderManifest *self)
 {
   return self->modules;
+}
+
+gboolean
+builder_manifest_build (BuilderManifest *self,
+                        BuilderContext *context,
+                        GError **error)
+{
+  GList *l;
+  builder_context_set_options (context, self->build_options);
+
+  g_print ("Downloading sources\n");
+  for (l = self->modules; l != NULL; l = l->next)
+    {
+      BuilderModule *m = l->data;
+
+      if (! builder_module_download_sources (m, context, error))
+        return FALSE;
+    }
+
+  g_print ("Starting build of %s\n", self->app_id ? self->app_id : "app");
+  for (l = self->modules; l != NULL; l = l->next)
+    {
+      BuilderModule *m = l->data;
+      if (!builder_module_build (m, context, error))
+        return FALSE;
+    }
+  return TRUE;
 }
