@@ -35,6 +35,7 @@ struct BuilderModule {
   char *name;
   char **config_opts;
   gboolean rm_configure;
+  BuilderOptions *build_options;
   GList *sources;
 };
 
@@ -53,6 +54,7 @@ enum {
   PROP_RM_CONFIGURE,
   PROP_CONFIG_OPTS,
   PROP_SOURCES,
+  PROP_BUILD_OPTIONS,
   LAST_PROP
 };
 
@@ -63,6 +65,8 @@ builder_module_finalize (GObject *object)
   BuilderModule *self = (BuilderModule *)object;
 
   g_free (self->name);
+  g_strfreev (self->config_opts);
+  g_clear_object (&self->build_options);
   g_list_free_full (self->sources, g_object_unref);
 
   G_OBJECT_CLASS (builder_module_parent_class)->finalize (object);
@@ -70,9 +74,9 @@ builder_module_finalize (GObject *object)
 
 static void
 builder_module_get_property (GObject    *object,
-                                guint       prop_id,
-                                GValue     *value,
-                                GParamSpec *pspec)
+                             guint       prop_id,
+                             GValue     *value,
+                             GParamSpec *pspec)
 {
   BuilderModule *self = BUILDER_MODULE (object);
 
@@ -90,6 +94,10 @@ builder_module_get_property (GObject    *object,
       g_value_set_boxed (value, self->config_opts);
       break;
 
+    case PROP_BUILD_OPTIONS:
+      g_value_set_object (value, self->build_options);
+      break;
+
     case PROP_SOURCES:
       g_value_set_pointer (value, self->sources);
       break;
@@ -101,9 +109,9 @@ builder_module_get_property (GObject    *object,
 
 static void
 builder_module_set_property (GObject      *object,
-                                guint         prop_id,
-                                const GValue *value,
-                                GParamSpec   *pspec)
+                             guint         prop_id,
+                             const GValue *value,
+                             GParamSpec   *pspec)
 {
   BuilderModule *self = BUILDER_MODULE (object);
   gchar **tmp;
@@ -123,6 +131,10 @@ builder_module_set_property (GObject      *object,
       tmp = self->config_opts;
       self->config_opts = g_strdupv (g_value_get_boxed (value));
       g_strfreev (tmp);
+      break;
+
+    case PROP_BUILD_OPTIONS:
+      g_set_object (&self->build_options,  g_value_get_object (value));
       break;
 
      case PROP_SOURCES:
@@ -172,6 +184,13 @@ builder_module_class_init (BuilderModuleClass *klass)
                                                        "",
                                                        G_TYPE_STRV,
                                                        G_PARAM_READWRITE));
+  g_object_class_install_property (object_class,
+                                   PROP_BUILD_OPTIONS,
+                                   g_param_spec_object ("build-options",
+                                                        "",
+                                                        "",
+                                                        BUILDER_TYPE_OPTIONS,
+                                                        G_PARAM_READWRITE));
 }
 
 static void
@@ -300,28 +319,32 @@ static gboolean
 build (GFile *app_dir,
        GFile *source_dir,
        GFile *cwd_dir,
+       char **env_vars,
        GError **error,
        const gchar            *argv1,
        ...)
 {
   g_autoptr(GSubprocessLauncher) launcher = NULL;
   g_autoptr(GSubprocess) subp = NULL;
-  g_autofree char *app_path = g_file_get_path (app_dir);
   g_autofree char *cwd = NULL;
-  GPtrArray *args;
+  g_autoptr(GPtrArray) args = NULL;
   const gchar *arg;
   const gchar **argv;
   g_autofree char *commandline = NULL;
   va_list ap;
   int i;
 
-  args = g_ptr_array_new ();
-  g_ptr_array_add (args, "xdg-app");
-  g_ptr_array_add (args, "build");
-  g_ptr_array_add (args, "--env=NOCONFIGURE=1");
-  g_ptr_array_add (args, app_path);
+  args = g_ptr_array_new_with_free_func (g_free);
+  g_ptr_array_add (args, g_strdup ("xdg-app"));
+  g_ptr_array_add (args, g_strdup ("build"));
+  if (env_vars)
+    {
+      for (i = 0; env_vars[i] != NULL; i++)
+        g_ptr_array_add (args, g_strdup_printf ("--env=%s", env_vars[i]));
+    }
+  g_ptr_array_add (args, g_file_get_path (app_dir));
   va_start (ap, argv1);
-  g_ptr_array_add (args, (gchar *) argv1);
+  g_ptr_array_add (args, g_strdup (argv1));
   while ((arg = va_arg (ap, const gchar *)))
     {
       if (arg == strv_arg)
@@ -330,17 +353,17 @@ build (GFile *app_dir,
           if (argv != NULL)
             {
               for (i = 0; argv[i] != NULL; i++)
-                g_ptr_array_add (args, (gchar *) argv[i]);
+                g_ptr_array_add (args, g_strdup (argv[i]));
             }
         }
       else if (arg != skip_arg)
-        g_ptr_array_add (args, (gchar *) arg);
+        g_ptr_array_add (args, g_strdup (arg));
     }
   g_ptr_array_add (args, NULL);
   va_end (ap);
 
   commandline = g_strjoinv (" ", (char **) args->pdata);
-  g_print ("Starting: %s\n", commandline);
+  g_print ("Running: %s\n", commandline);
 
   launcher = g_subprocess_launcher_new (0);
 
@@ -366,7 +389,6 @@ builder_module_build (BuilderModule *self,
                       GFile *app_dir,
                       GFile *source_dir,
                       BuilderContext *context,
-                      BuilderOptions  *global_options,
                       GError **error)
 {
   g_autofree char *make_j = NULL;
@@ -382,6 +404,18 @@ builder_module_build (BuilderModule *self,
   gboolean has_notparallel;
   gboolean use_builddir;
   int i;
+  g_auto(GStrv) env = NULL;
+  const char *cflags, *cxxflags;
+
+  env = builder_options_get_env (self->build_options, context);
+
+  cflags = builder_options_get_cflags (self->build_options, context);
+  if (cflags)
+    env = g_environ_setenv (env, "CFLAGS", cflags, TRUE);
+
+  cxxflags = builder_options_get_cflags (self->build_options, context);
+  if (cxxflags)
+    env = g_environ_setenv (env, "CXXFLAGS", cflags, TRUE);
 
   if (self->rm_configure)
     {
@@ -395,6 +429,7 @@ builder_module_build (BuilderModule *self,
     {
       const char *autogen_names[] =  {"autogen", "autogen.sh", "bootstrap", NULL};
       g_autofree char *autogen_cmd = NULL;
+      g_auto(GStrv) env_with_noconfigure = NULL;
 
       for (i = 0; autogen_names[i] != NULL; i++)
         {
@@ -412,7 +447,8 @@ builder_module_build (BuilderModule *self,
           return FALSE;
         }
 
-      if (!build (app_dir, source_dir, NULL, error,
+      env_with_noconfigure = g_environ_setenv (g_strdupv (env), "NOCONFIGURE", "1", TRUE);
+      if (!build (app_dir, source_dir, NULL, env_with_noconfigure, error,
                   autogen_cmd, NULL))
         return FALSE;
     }
@@ -434,7 +470,7 @@ builder_module_build (BuilderModule *self,
       configure_cmd = "./configure";
     }
 
-  if (!build (app_dir, source_dir, build_dir, error,
+  if (!build (app_dir, source_dir, build_dir, env, error,
               configure_cmd, "--prefix=/app", strv_arg, self->config_opts, NULL))
     return FALSE;
 
@@ -465,11 +501,11 @@ builder_module_build (BuilderModule *self,
       make_l = g_strdup_printf ("-l%d", 2*builder_context_get_n_cpu (context));
     }
 
-  if (!build (app_dir, source_dir, build_dir, error,
+  if (!build (app_dir, source_dir, build_dir, env, error,
               "make", "all", make_j?make_j:skip_arg, make_l?make_l:skip_arg, NULL))
     return FALSE;
 
-  if (!build (app_dir, source_dir, build_dir, error,
+  if (!build (app_dir, source_dir, build_dir, env, error,
               "make", "install", NULL))
     return FALSE;
 

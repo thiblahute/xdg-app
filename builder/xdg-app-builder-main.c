@@ -119,8 +119,7 @@ main (int    argc,
   g_print ("app id %s\n", builder_manifest_get_app_id (manifest));
   options = builder_manifest_get_build_options (manifest);
   g_print ("options %p\n", options);
-  if (options)
-    g_print ("cflags %s\n", builder_options_get_cflags (options));
+  builder_context_set_options (build_context, options);
   modules = builder_manifest_get_modules (manifest);
   g_print ("modules\n");
   for (l = modules; l != NULL; l = l->next)
@@ -162,7 +161,6 @@ main (int    argc,
                                  app_dir,
                                  source_dir,
                                  build_context,
-                                 builder_manifest_get_build_options (manifest),
                                  &error))
         {
           g_print ("build error: %s\n", error->message);

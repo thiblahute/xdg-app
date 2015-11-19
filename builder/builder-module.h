@@ -50,7 +50,6 @@ gboolean builder_module_build            (BuilderModule   *self,
                                           GFile           *app_dir,
                                           GFile           *source_dir,
                                           BuilderContext  *context,
-                                          BuilderOptions  *global_options,
                                           GError         **error);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(BuilderModule, g_object_unref)

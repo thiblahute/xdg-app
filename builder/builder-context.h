@@ -23,10 +23,11 @@
 
 #include <gio/gio.h>
 #include <libsoup/soup.h>
+#include "builder-options.h"
 
 G_BEGIN_DECLS
 
-typedef struct BuilderContext BuilderContext;
+/* BuilderContext defined in builder-options.h to fix include loop */
 
 #define BUILDER_TYPE_CONTEXT (builder_context_get_type())
 #define BUILDER_CONTEXT(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), BUILDER_TYPE_CONTEXT, BuilderContext))
@@ -41,6 +42,9 @@ const char *    builder_context_get_arch         (BuilderContext *self);
 void            builder_context_set_arch         (BuilderContext *self,
                                                   const char     *arch);
 int             builder_context_get_n_cpu        (BuilderContext *self);
+BuilderOptions *builder_context_get_options      (BuilderContext *self);
+void            builder_context_set_options      (BuilderContext *self,
+                                                  BuilderOptions *option);
 
 BuilderContext *builder_context_new              (GFile          *base_dir);
 

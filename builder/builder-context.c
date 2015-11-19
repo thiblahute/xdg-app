@@ -36,6 +36,8 @@ struct BuilderContext {
   GFile *base_dir;
   SoupSession *soup_session;
   char *arch;
+
+  BuilderOptions *options;
 };
 
 typedef struct {
@@ -58,6 +60,7 @@ builder_context_finalize (GObject *object)
 
   g_clear_object (&self->base_dir);
   g_clear_object (&self->soup_session);
+  g_clear_object (&self->options);
   g_free (self->arch);
 
   G_OBJECT_CLASS (builder_context_parent_class)->finalize (object);
@@ -178,6 +181,19 @@ builder_context_set_arch (BuilderContext *self,
 {
   g_free (self->arch);
   self->arch = g_strdup (arch);
+}
+
+BuilderOptions *
+builder_context_get_options (BuilderContext *self)
+{
+  return self->options;
+}
+
+void
+builder_context_set_options (BuilderContext *self,
+                             BuilderOptions *option)
+{
+  g_set_object (&self->options, option);
 }
 
 int

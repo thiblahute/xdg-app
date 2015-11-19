@@ -25,6 +25,7 @@
 
 G_BEGIN_DECLS
 
+typedef struct BuilderContext BuilderContext;
 typedef struct BuilderOptions BuilderOptions;
 
 #define BUILDER_TYPE_OPTIONS (builder_options_get_type())
@@ -33,7 +34,12 @@ typedef struct BuilderOptions BuilderOptions;
 
 GType builder_options_get_type (void);
 
-const char * builder_options_get_cflags (BuilderOptions  *self);
+const char *builder_options_get_cflags   (BuilderOptions *self,
+                                          BuilderContext *context);
+const char *builder_options_get_cxxflags (BuilderOptions *self,
+                                          BuilderContext *context);
+char **     builder_options_get_env      (BuilderOptions *self,
+                                          BuilderContext *context);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(BuilderOptions, g_object_unref)
 
