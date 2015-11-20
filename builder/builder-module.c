@@ -494,9 +494,9 @@ builder_module_build (BuilderModule *self,
   if (cflags)
     env = g_environ_setenv (env, "CFLAGS", cflags, TRUE);
 
-  cxxflags = builder_options_get_cflags (self->build_options, context);
+  cxxflags = builder_options_get_cxxflags (self->build_options, context);
   if (cxxflags)
-    env = g_environ_setenv (env, "CXXFLAGS", cflags, TRUE);
+    env = g_environ_setenv (env, "CXXFLAGS", cxxflags, TRUE);
 
   configure_file = g_file_get_child (source_dir, "configure");
 
