@@ -412,19 +412,23 @@ builder_module_build (BuilderModule *self,
   const char *cflags, *cxxflags;
   g_autofree char *buildname = NULL;
   g_autoptr(GFile) source_dir = NULL;
+  g_autoptr(GFile) source_dir_template = NULL;
   g_autofree char *source_dir_path = NULL;
 
-  buildname = g_strdup_printf ("build-%s", self->name);
-  source_dir = g_file_get_child (base_dir, buildname);
+  buildname = g_strdup_printf ("build-%s-XXXXXX", self->name);
 
-  source_dir_path = g_file_get_path (source_dir);
+  source_dir_template = g_file_get_child (base_dir, buildname);
+  source_dir_path = g_file_get_path (source_dir_template);;
+
+  if (g_mkdtemp (source_dir_path) == NULL)
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "Can't create build directory");
+      return FALSE;
+    }
+
+  source_dir = g_file_new_for_path (source_dir_path);
+
   g_print ("Building module %s in %s\n", self->name, source_dir_path);
-
-  if (!gs_shutil_rm_rf (source_dir, NULL, error))
-    return FALSE;
-
-  if (!g_file_make_directory_with_parents (source_dir, NULL, error))
-    return FALSE;
 
   if (!builder_module_extract_sources (self, source_dir, context, error))
     return FALSE;
@@ -531,6 +535,9 @@ builder_module_build (BuilderModule *self,
 
   if (!build (app_dir, source_dir, build_dir, env, error,
               "make", "install", NULL))
+    return FALSE;
+
+  if (!gs_shutil_rm_rf (source_dir, NULL, error))
     return FALSE;
 
   return TRUE;
