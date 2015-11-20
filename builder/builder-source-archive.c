@@ -349,6 +349,46 @@ tar (GFile *dir,
   return TRUE;
 }
 
+static gboolean
+unzip (GFile *dir,
+       GError **error,
+       const gchar            *argv1,
+     ...)
+{
+  g_autoptr(GSubprocessLauncher) launcher = NULL;
+  g_autoptr(GSubprocess) subp = NULL;
+  GPtrArray *args;
+  const gchar *arg;
+  va_list ap;
+
+  args = g_ptr_array_new ();
+  g_ptr_array_add (args, "unzip");
+  va_start (ap, argv1);
+  g_ptr_array_add (args, (gchar *) argv1);
+  while ((arg = va_arg (ap, const gchar *)))
+    g_ptr_array_add (args, (gchar *) arg);
+  g_ptr_array_add (args, NULL);
+  va_end (ap);
+
+  launcher = g_subprocess_launcher_new (0);
+
+  if (dir)
+    {
+      g_autofree char *path = g_file_get_path (dir);
+      g_subprocess_launcher_set_cwd (launcher, path);
+    }
+
+  subp = g_subprocess_launcher_spawnv (launcher, (const gchar * const *) args->pdata, error);
+  g_ptr_array_free (args, TRUE);
+
+  if (subp == NULL ||
+      !g_subprocess_wait_check (subp, NULL, error))
+    return FALSE;
+
+  return TRUE;
+}
+
+
 BuilderArchiveType
 get_type (GFile *archivefile)
 {
@@ -396,6 +436,62 @@ get_type (GFile *archivefile)
 }
 
 static gboolean
+strip_components_into (GFile *dest,
+                       GFile *src,
+                       int level,
+                       GError **error)
+{
+  g_autoptr(GFileEnumerator) dir_enum = NULL;
+  g_autoptr(GFileInfo) child_info = NULL;
+  GError *temp_error = NULL;
+
+  dir_enum = g_file_enumerate_children (src, "standard::name,standard::type",
+                                        G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,
+                                        NULL, error);
+  if (!dir_enum)
+    return FALSE;;
+
+  while ((child_info = g_file_enumerator_next_file (dir_enum, NULL, &temp_error)))
+    {
+      g_autoptr(GFile) child = NULL;
+      g_autoptr(GFile) dest_child = NULL;
+      g_autoptr(GFileEnumerator) dir_enum2 = NULL;
+      g_autoptr(GFileInfo) child_info2 = NULL;
+
+      child = g_file_get_child (src, g_file_info_get_name (child_info));
+
+      if (g_file_info_get_file_type (child_info) == G_FILE_TYPE_DIRECTORY &&
+          level > 0)
+        {
+          if (!strip_components_into (dest, child, level - 1, error))
+            return FALSE;
+
+          g_clear_object (&child_info);
+          continue;
+        }
+
+      dest_child = g_file_get_child (dest, g_file_info_get_name (child_info));
+      if (!g_file_move (child, dest_child, G_FILE_COPY_NONE, NULL, NULL, NULL, error))
+        return FALSE;
+
+      g_clear_object (&child_info);
+      continue;
+    }
+
+  if (temp_error != NULL)
+    {
+      g_propagate_error (error, temp_error);
+      return FALSE;
+    }
+
+  if (!g_file_delete (src, NULL, error))
+    return FALSE;
+
+  return TRUE;
+}
+
+
+static gboolean
 builder_source_archive_extract (BuilderSource *source,
                                 GFile *dest,
                                 BuilderContext *context,
@@ -404,7 +500,6 @@ builder_source_archive_extract (BuilderSource *source,
   BuilderSourceArchive *self = BUILDER_SOURCE_ARCHIVE (source);
   g_autoptr(GFile) archivefile = NULL;
   g_autofree char *archive_path = NULL;
-  g_autofree char *strip_components = NULL;
   BuilderArchiveType type;
 
   archivefile = get_download_location (self, context, error);
@@ -417,10 +512,39 @@ builder_source_archive_extract (BuilderSource *source,
 
   if (is_tar (type))
     {
-      strip_components = g_strdup_printf ("--strip-components=%u", self->strip_components);
+      g_autofree char *strip_components = g_strdup_printf ("--strip-components=%u", self->strip_components);
       /* Note: tar_decompress_flag can return NULL, so put it last */
       if (!tar (dest, error, "xf", archive_path, strip_components, tar_decompress_flag (type), NULL))
         return FALSE;
+    }
+  else if (type == ZIP)
+    {
+      g_autoptr(GFile) zip_dest = NULL;
+
+      if (self->strip_components > 0)
+        {
+          g_autoptr(GFile) tmp_dir_template = g_file_get_child (dest, ".uncompressXXXXXX");
+          g_autofree char *tmp_dir_path = g_file_get_path (tmp_dir_template);;
+
+          if (g_mkdtemp (tmp_dir_path) == NULL)
+            {
+              g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "Can't create uncompress directory");
+              return FALSE;
+            }
+
+          zip_dest = g_file_new_for_path (tmp_dir_path);
+        }
+      else
+        zip_dest = g_object_ref (dest);
+
+      if (!unzip (zip_dest, error, archive_path, NULL))
+        return FALSE;
+
+      if (self->strip_components > 0)
+        {
+          if (!strip_components_into (dest, zip_dest, self->strip_components, error))
+            return FALSE;
+        }
     }
   else
     {
