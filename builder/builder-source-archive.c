@@ -54,6 +54,50 @@ enum {
   LAST_PROP
 };
 
+typedef enum {
+  UNKNOWN,
+  TAR,
+  TAR_GZIP,
+  TAR_COMPRESS,
+  TAR_BZIP2,
+  TAR_LZIP,
+  TAR_LZMA,
+  TAR_LZOP,
+  TAR_XZ,
+  ZIP
+} BuilderArchiveType;
+
+gboolean
+is_tar (BuilderArchiveType type)
+{
+  return (type >= TAR) && (type <= TAR_XZ);
+}
+
+const char *
+tar_decompress_flag (BuilderArchiveType type)
+{
+  switch (type)
+    {
+    default:
+    case TAR:
+      return NULL;
+    case TAR_GZIP:
+      return "-z";
+    case TAR_COMPRESS:
+      return "-Z";
+    case TAR_BZIP2:
+      return "-j";
+    case TAR_LZIP:
+      return "--lzip";
+    case TAR_LZMA:
+      return "--lzma";
+    case TAR_LZOP:
+      return "--lzop";
+    case TAR_XZ:
+      return "-J";
+    }
+}
+
 static void
 builder_source_archive_finalize (GObject *object)
 {
@@ -305,6 +349,52 @@ tar (GFile *dir,
   return TRUE;
 }
 
+BuilderArchiveType
+get_type (GFile *archivefile)
+{
+  g_autofree char *base_name = NULL;
+  g_autofree gchar *lower = NULL;
+
+  base_name = g_file_get_basename (archivefile);
+  lower = g_ascii_strdown (base_name, -1);
+
+  if (g_str_has_suffix (lower, ".tar"))
+    return TAR;
+
+  if (g_str_has_suffix (lower, ".tar.gz") ||
+      g_str_has_suffix (lower, ".tgz") ||
+      g_str_has_suffix (lower, ".taz"))
+    return TAR_GZIP;
+
+  if (g_str_has_suffix (lower, ".tar.Z") ||
+      g_str_has_suffix (lower, ".taZ"))
+    return TAR_COMPRESS;
+
+  if (g_str_has_suffix (lower, ".tar.bz2") ||
+      g_str_has_suffix (lower, ".tz2") ||
+      g_str_has_suffix (lower, ".tbz2") ||
+      g_str_has_suffix (lower, ".tbz"))
+    return TAR_BZIP2;
+
+  if (g_str_has_suffix (lower, ".tar.lz"))
+    return TAR_LZIP;
+
+  if (g_str_has_suffix (lower, ".tar.lzma") ||
+      g_str_has_suffix (lower, ".tlz"))
+    return TAR_LZMA;
+
+  if (g_str_has_suffix (lower, ".tar.lzo"))
+    return TAR_LZOP;
+
+  if (g_str_has_suffix (lower, ".tar.xz"))
+    return TAR_XZ;
+
+  if (g_str_has_suffix (lower, ".zip"))
+    return ZIP;
+
+  return UNKNOWN;
+}
+
 static gboolean
 builder_source_archive_extract (BuilderSource *source,
                                 GFile *dest,
@@ -315,15 +405,28 @@ builder_source_archive_extract (BuilderSource *source,
   g_autoptr(GFile) archivefile = NULL;
   g_autofree char *archive_path = NULL;
   g_autofree char *strip_components = NULL;
+  BuilderArchiveType type;
 
   archivefile = get_download_location (self, context, error);
   if (archivefile == NULL)
     return FALSE;
 
-  strip_components = g_strdup_printf ("--strip-components=%u", self->strip_components);
+  type = get_type (archivefile);
+
   archive_path = g_file_get_path (archivefile);
-  if (!tar (dest, error, "xf", archive_path, strip_components, NULL))
-    return FALSE;
+
+  if (is_tar (type))
+    {
+      strip_components = g_strdup_printf ("--strip-components=%u", self->strip_components);
+      /* Note: tar_decompress_flag can return NULL, so put it last */
+      if (!tar (dest, error, "xf", archive_path, strip_components, tar_decompress_flag (type), NULL))
+        return FALSE;
+    }
+  else
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "Unknown archive format of '%s'", archive_path);
+      return FALSE;
+    }
 
   return TRUE;
 }
