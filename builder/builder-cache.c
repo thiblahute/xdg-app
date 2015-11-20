@@ -71,7 +71,7 @@ builder_cache_finalize (GObject *object)
 
   g_clear_object (&self->cache_dir);
   g_clear_object (&self->app_dir);
-  g_checksum_free (self->checksum); 
+  g_checksum_free (self->checksum);
   g_free (self->branch);
   g_free (self->last_parent);
 
@@ -194,7 +194,7 @@ builder_cache_open (BuilderCache *self,
                     GError **error)
 {
   self->repo = ostree_repo_new (self->cache_dir);
-  
+
   if (!g_file_query_exists (self->cache_dir, NULL))
     {
       if (!ostree_repo_create (self->repo, OSTREE_REPO_MODE_BARE, NULL, error))
@@ -244,14 +244,16 @@ builder_cache_checkout (BuilderCache *self, const char *commit)
 gboolean
 builder_cache_lookup (BuilderCache *self)
 {
-  g_autofree char *current = builder_cache_get_current (self);
+  g_autofree char *current = NULL;
   g_autofree char *commit = NULL;
 
   if (self->disabled)
     return FALSE;
-    
+
   if (!ostree_repo_resolve_rev (self->repo, self->branch, TRUE, &commit, NULL))
     goto checkout;
+
+  current = builder_cache_get_current (self);
 
   while (commit != NULL)
     {
@@ -272,7 +274,7 @@ builder_cache_lookup (BuilderCache *self)
 
           return TRUE;
         }
-      
+
       g_free (commit);
       commit = ostree_commit_get_parent (variant);
     }
@@ -287,7 +289,7 @@ builder_cache_lookup (BuilderCache *self)
     }
 
   self->disabled = TRUE; /* Don't use cache any more after first miss */
-  
+
   return FALSE;
 }
 
@@ -296,7 +298,7 @@ builder_cache_commit (BuilderCache  *self,
                       const char *body,
                       GError       **error)
 {
-  g_autofree char *current = builder_cache_get_current (self);
+  g_autofree char *current = NULL;
   OstreeRepoCommitModifier *modifier = NULL;
   g_autoptr(OstreeMutableTree) mtree = NULL;
   g_autoptr(GFile) root = NULL;
@@ -316,6 +318,8 @@ builder_cache_commit (BuilderCache  *self,
 
   if (!ostree_repo_write_mtree (self->repo, mtree, &root, NULL, error))
     goto out;
+
+  current = builder_cache_get_current (self);
 
   if (!ostree_repo_write_commit (self->repo, self->last_parent, current, body, NULL,
                                  OSTREE_REPO_FILE (root),
@@ -340,7 +344,12 @@ builder_cache_commit (BuilderCache  *self,
     }
   if (modifier)
     ostree_repo_commit_modifier_unref (modifier);
-  
+
   return res;
 }
 
+void
+builder_cache_disable_lookups (BuilderCache  *self)
+{
+  self->disabled = TRUE;
+}

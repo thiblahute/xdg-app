@@ -33,16 +33,17 @@ typedef struct BuilderCache BuilderCache;
 
 GType builder_cache_get_type (void);
 
-BuilderCache *builder_cache_new          (GFile         *cache_dir,
-                                          GFile         *app_dir,
-                                          const char    *branch);
-gboolean      builder_cache_open         (BuilderCache  *self,
-                                          GError       **error);
-GChecksum *   builder_cache_get_checksum (BuilderCache  *self);
-gboolean      builder_cache_lookup       (BuilderCache  *self);
-gboolean      builder_cache_commit       (BuilderCache  *self,
-                                          const char    *body,
-                                          GError       **error);
+BuilderCache *builder_cache_new             (GFile         *cache_dir,
+                                             GFile         *app_dir,
+                                             const char    *branch);
+void          builder_cache_disable_lookups (BuilderCache  *self);
+gboolean      builder_cache_open            (BuilderCache  *self,
+                                             GError       **error);
+GChecksum *   builder_cache_get_checksum    (BuilderCache  *self);
+gboolean      builder_cache_lookup          (BuilderCache  *self);
+gboolean      builder_cache_commit          (BuilderCache  *self,
+                                             const char    *body,
+                                             GError       **error);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(BuilderCache, g_object_unref)
 

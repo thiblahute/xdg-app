@@ -33,10 +33,12 @@
 
 static gboolean opt_verbose;
 static gboolean opt_version;
+static gboolean opt_disable_cache;
 
 static GOptionEntry entries[] = {
   { "verbose", 'v', 0, G_OPTION_ARG_NONE, &opt_verbose, "Print debug information during command processing", NULL },
   { "version", 0, 0, G_OPTION_ARG_NONE, &opt_version, "Print version information and exit", NULL },
+  { "disable-cache", 0, 0, G_OPTION_ARG_NONE, &opt_disable_cache, "Disable cache", NULL },
   { NULL }
 };
 
@@ -156,10 +158,12 @@ main (int    argc,
       return 1;
     }
 
+  if (opt_disable_cache) /* This disables *lookups*, but we still build the cache */
+    builder_cache_disable_lookups (cache);
+
   builder_manifest_checksum (manifest,
                              builder_cache_get_checksum (cache),
                              build_context);
-
 
   if (!builder_cache_lookup (cache))
     {
