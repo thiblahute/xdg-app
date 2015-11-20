@@ -39,7 +39,10 @@ struct BuilderModule {
 
   char *name;
   char **config_opts;
+  char **make_args;
+  char **make_install_args;
   gboolean rm_configure;
+  gboolean no_autogen;
   BuilderOptions *build_options;
   GList *sources;
 };
@@ -57,7 +60,10 @@ enum {
   PROP_0,
   PROP_NAME,
   PROP_RM_CONFIGURE,
+  PROP_NO_AUTOGEN,
   PROP_CONFIG_OPTS,
+  PROP_MAKE_ARGS,
+  PROP_MAKE_INSTALL_ARGS,
   PROP_SOURCES,
   PROP_BUILD_OPTIONS,
   LAST_PROP
@@ -71,6 +77,8 @@ builder_module_finalize (GObject *object)
 
   g_free (self->name);
   g_strfreev (self->config_opts);
+  g_strfreev (self->make_args);
+  g_strfreev (self->make_install_args);
   g_clear_object (&self->build_options);
   g_list_free_full (self->sources, g_object_unref);
 
@@ -95,8 +103,20 @@ builder_module_get_property (GObject    *object,
       g_value_set_boolean (value, self->rm_configure);
       break;
 
+    case PROP_NO_AUTOGEN:
+      g_value_set_boolean (value, self->no_autogen);
+      break;
+
     case PROP_CONFIG_OPTS:
       g_value_set_boxed (value, self->config_opts);
+      break;
+
+    case PROP_MAKE_ARGS:
+      g_value_set_boxed (value, self->make_args);
+      break;
+
+    case PROP_MAKE_INSTALL_ARGS:
+      g_value_set_boxed (value, self->make_install_args);
       break;
 
     case PROP_BUILD_OPTIONS:
@@ -132,9 +152,25 @@ builder_module_set_property (GObject      *object,
       self->rm_configure = g_value_get_boolean (value);
       break;
 
+    case PROP_NO_AUTOGEN:
+      self->no_autogen = g_value_get_boolean (value);
+      break;
+
     case PROP_CONFIG_OPTS:
       tmp = self->config_opts;
       self->config_opts = g_strdupv (g_value_get_boxed (value));
+      g_strfreev (tmp);
+      break;
+
+    case PROP_MAKE_ARGS:
+      tmp = self->make_args;
+      self->make_args = g_strdupv (g_value_get_boxed (value));
+      g_strfreev (tmp);
+      break;
+
+    case PROP_MAKE_INSTALL_ARGS:
+      tmp = self->make_install_args;
+      self->make_install_args = g_strdupv (g_value_get_boxed (value));
       g_strfreev (tmp);
       break;
 
@@ -177,6 +213,13 @@ builder_module_class_init (BuilderModuleClass *klass)
                                                          FALSE,
                                                          G_PARAM_READWRITE));
   g_object_class_install_property (object_class,
+                                   PROP_NO_AUTOGEN,
+                                   g_param_spec_boolean ("no-autogen",
+                                                         "",
+                                                         "",
+                                                         FALSE,
+                                                         G_PARAM_READWRITE));
+  g_object_class_install_property (object_class,
                                    PROP_SOURCES,
                                    g_param_spec_pointer ("sources",
                                                          "",
@@ -185,6 +228,20 @@ builder_module_class_init (BuilderModuleClass *klass)
   g_object_class_install_property (object_class,
                                    PROP_CONFIG_OPTS,
                                    g_param_spec_boxed ("config-opts",
+                                                       "",
+                                                       "",
+                                                       G_TYPE_STRV,
+                                                       G_PARAM_READWRITE));
+  g_object_class_install_property (object_class,
+                                   PROP_MAKE_ARGS,
+                                   g_param_spec_boxed ("make-args",
+                                                       "",
+                                                       "",
+                                                       G_TYPE_STRV,
+                                                       G_PARAM_READWRITE));
+  g_object_class_install_property (object_class,
+                                   PROP_MAKE_INSTALL_ARGS,
+                                   g_param_spec_boxed ("make-install-args",
                                                        "",
                                                        "",
                                                        G_TYPE_STRV,
@@ -397,12 +454,10 @@ builder_module_build (BuilderModule *self,
   g_autoptr(GFile) base_dir = builder_context_get_base_dir (context);
   g_autofree char *make_j = NULL;
   g_autofree char *make_l = NULL;
-  g_autofree char *configure_content = NULL;
   g_autofree char *makefile_content = NULL;
   g_autoptr(GFile) configure_file = NULL;
   const char *makefile_names[] =  {"Makefile", "makefile", "GNUmakefile", NULL};
   g_autoptr(GFile) build_dir = NULL;
-  const char *configure_cmd;
   gboolean has_configure;
   gboolean var_require_builddir;
   gboolean has_notparallel;
@@ -453,7 +508,7 @@ builder_module_build (BuilderModule *self,
 
   has_configure = g_file_query_exists (configure_file, NULL);
 
-  if (!has_configure)
+  if (!has_configure && !self->no_autogen)
     {
       const char *autogen_names[] =  {"autogen", "autogen.sh", "bootstrap", NULL};
       g_autofree char *autogen_cmd = NULL;
@@ -479,28 +534,44 @@ builder_module_build (BuilderModule *self,
       if (!build (app_dir, source_dir, NULL, env_with_noconfigure, error,
                   autogen_cmd, NULL))
         return FALSE;
+
+      if (!g_file_query_exists (configure_file, NULL))
+        {
+          g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "autogen did not create configure");
+          return FALSE;
+        }
+
+      has_configure = TRUE;
     }
 
-  if (!g_file_load_contents (configure_file, NULL, &configure_content, NULL, NULL, error))
-    return FALSE;
-
-  var_require_builddir = strstr (configure_content, "buildapi-variable-require-builddir") != NULL;
-  use_builddir = var_require_builddir;
-
-  if (use_builddir)
+  if (has_configure)
     {
-      build_dir = g_file_get_child (source_dir, "_build");
-      configure_cmd = "../configure";
+      const char *configure_cmd;
+      g_autofree char *configure_content = NULL;
+
+      if (!g_file_load_contents (configure_file, NULL, &configure_content, NULL, NULL, error))
+        return FALSE;
+
+      var_require_builddir = strstr (configure_content, "buildapi-variable-require-builddir") != NULL;
+      use_builddir = var_require_builddir;
+
+      if (use_builddir)
+        {
+          build_dir = g_file_get_child (source_dir, "_build");
+          configure_cmd = "../configure";
+        }
+      else
+        {
+          build_dir = g_object_ref (source_dir);
+          configure_cmd = "./configure";
+        }
+
+      if (!build (app_dir, source_dir, build_dir, env, error,
+                  configure_cmd, "--prefix=/app", strv_arg, self->config_opts, NULL))
+        return FALSE;
     }
   else
-    {
-      build_dir = g_object_ref (source_dir);
-      configure_cmd = "./configure";
-    }
-
-  if (!build (app_dir, source_dir, build_dir, env, error,
-              configure_cmd, "--prefix=/app", strv_arg, self->config_opts, NULL))
-    return FALSE;
+    build_dir = g_object_ref (source_dir);
 
   for (i = 0; makefile_names[i] != NULL; i++)
     {
@@ -530,11 +601,11 @@ builder_module_build (BuilderModule *self,
     }
 
   if (!build (app_dir, source_dir, build_dir, env, error,
-              "make", "all", make_j?make_j:skip_arg, make_l?make_l:skip_arg, NULL))
+              "make", "all", make_j?make_j:skip_arg, make_l?make_l:skip_arg, strv_arg, self->make_args, NULL))
     return FALSE;
 
   if (!build (app_dir, source_dir, build_dir, env, error,
-              "make", "install", NULL))
+              "make", "install", strv_arg, self->make_install_args, NULL))
     return FALSE;
 
   if (!gs_shutil_rm_rf (source_dir, NULL, error))
@@ -553,7 +624,10 @@ builder_module_checksum (BuilderModule  *self,
   builder_checksum_str (checksum, BUILDER_MODULE_CHECKSUM_VERSION);
   builder_checksum_str (checksum, self->name);
   builder_checksum_strv (checksum, self->config_opts);
+  builder_checksum_strv (checksum, self->make_args);
+  builder_checksum_strv (checksum, self->make_install_args);
   builder_checksum_boolean (checksum, self->rm_configure);
+  builder_checksum_boolean (checksum, self->no_autogen);
 
   for (l = self->sources; l != NULL; l = l->next)
     {
