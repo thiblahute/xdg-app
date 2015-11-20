@@ -36,7 +36,7 @@ struct BuilderSourceArchive {
   BuilderSource parent;
 
   char *url;
-  char *checksum;
+  char *sha256;
   guint strip_components;
 };
 
@@ -49,7 +49,7 @@ G_DEFINE_TYPE (BuilderSourceArchive, builder_source_archive, BUILDER_TYPE_SOURCE
 enum {
   PROP_0,
   PROP_URL,
-  PROP_CHECKSUM,
+  PROP_SHA256,
   PROP_STRIP_COMPONENTS,
   LAST_PROP
 };
@@ -104,7 +104,7 @@ builder_source_archive_finalize (GObject *object)
   BuilderSourceArchive *self = (BuilderSourceArchive *)object;
 
   g_free (self->url);
-  g_free (self->checksum);
+  g_free (self->sha256);
 
   G_OBJECT_CLASS (builder_source_archive_parent_class)->finalize (object);
 }
@@ -123,8 +123,8 @@ builder_source_archive_get_property (GObject    *object,
       g_value_set_string (value, self->url);
       break;
 
-    case PROP_CHECKSUM:
-      g_value_set_string (value, self->checksum);
+    case PROP_SHA256:
+      g_value_set_string (value, self->sha256);
       break;
 
     case PROP_STRIP_COMPONENTS:
@@ -151,9 +151,9 @@ builder_source_archive_set_property (GObject      *object,
       self->url = g_value_dup_string (value);
       break;
 
-    case PROP_CHECKSUM:
-      g_free (self->checksum);
-      self->checksum = g_value_dup_string (value);
+    case PROP_SHA256:
+      g_free (self->sha256);
+      self->sha256 = g_value_dup_string (value);
       break;
 
     case PROP_STRIP_COMPONENTS:
@@ -195,7 +195,7 @@ get_download_location (BuilderSourceArchive *self,
   const char *path;
   g_autofree char *base_name = NULL;
   g_autoptr(GFile) download_dir = NULL;
-  g_autoptr(GFile) checksum_dir = NULL;
+  g_autoptr(GFile) sha256_dir = NULL;
   g_autoptr(GFile) file = NULL;
 
   uri = get_uri (self, error);
@@ -206,15 +206,15 @@ get_download_location (BuilderSourceArchive *self,
 
   base_name = g_path_get_basename (path);
 
-  if (self->checksum == NULL || *self->checksum == 0)
+  if (self->sha256 == NULL || *self->sha256 == 0)
     {
-      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "Checksum not specified");
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "Sha256 not specified");
       return FALSE;
     }
 
   download_dir = builder_context_get_download_dir (context);
-  checksum_dir = g_file_get_child (download_dir, self->checksum);
-  file = g_file_get_child (checksum_dir, base_name);
+  sha256_dir = g_file_get_child (download_dir, self->sha256);
+  file = g_file_get_child (sha256_dir, base_name);
 
   return g_steal_pointer (&file);
 }
@@ -231,7 +231,7 @@ builder_source_archive_download (BuilderSource *source,
   SoupSession *session;
   g_autofree char *url = NULL;
   g_autofree char *dir_path = NULL;
-  g_autofree char *checksum = NULL;
+  g_autofree char *sha256 = NULL;
   g_autofree char *base_name = NULL;
   g_autoptr(SoupMessage) msg = NULL;
 
@@ -285,14 +285,14 @@ builder_source_archive_download (BuilderSource *source,
       break; /* No redirection */
     }
 
-  checksum = g_compute_checksum_for_string (G_CHECKSUM_SHA256,
-                                            msg->response_body->data,
-                                            msg->response_body->length);
+  sha256 = g_compute_checksum_for_string (G_CHECKSUM_SHA256,
+                                          msg->response_body->data,
+                                          msg->response_body->length);
 
-  if (strcmp (checksum, self->checksum) != 0)
+  if (strcmp (sha256, self->sha256) != 0)
     {
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
-                   "Wrong checksum for %s, expected %s, was %s", base_name, self->checksum, checksum);
+                   "Wrong sha256 for %s, expected %s, was %s", base_name, self->sha256, sha256);
       return FALSE;
     }
 
@@ -563,7 +563,7 @@ builder_source_archive_checksum (BuilderSource  *source,
   BuilderSourceArchive *self = BUILDER_SOURCE_ARCHIVE (source);
 
   builder_checksum_str (checksum, self->url);
-  builder_checksum_str (checksum, self->checksum);
+  builder_checksum_str (checksum, self->sha256);
   builder_checksum_uint32 (checksum, self->strip_components);
 }
 
@@ -590,8 +590,8 @@ builder_source_archive_class_init (BuilderSourceArchiveClass *klass)
                                                         NULL,
                                                         G_PARAM_READWRITE));
   g_object_class_install_property (object_class,
-                                   PROP_CHECKSUM,
-                                   g_param_spec_string ("checksum",
+                                   PROP_SHA256,
+                                   g_param_spec_string ("sha256",
                                                         "",
                                                         "",
                                                         NULL,
