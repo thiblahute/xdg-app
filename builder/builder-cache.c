@@ -353,3 +353,19 @@ builder_cache_disable_lookups (BuilderCache  *self)
 {
   self->disabled = TRUE;
 }
+
+gboolean
+builder_gc (BuilderCache  *self,
+            GError       **error)
+{
+  gint objects_total;
+  gint objects_pruned;
+  guint64 pruned_object_size_total;
+
+  return ostree_repo_prune (self->repo,
+                            OSTREE_REPO_PRUNE_FLAGS_REFS_ONLY, -1,
+                            &objects_total,
+                            &objects_pruned,
+                            &pruned_object_size_total,
+                            NULL, error);
+}

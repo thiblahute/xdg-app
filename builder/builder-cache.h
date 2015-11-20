@@ -44,6 +44,8 @@ gboolean      builder_cache_lookup          (BuilderCache  *self);
 gboolean      builder_cache_commit          (BuilderCache  *self,
                                              const char    *body,
                                              GError       **error);
+gboolean      builder_gc                    (BuilderCache  *self,
+                                             GError       **error);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(BuilderCache, g_object_unref)
 

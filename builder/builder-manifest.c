@@ -439,5 +439,6 @@ builder_manifest_build (BuilderManifest *self,
         g_print ("Cache hit for %s, skipping build\n",
                  builder_module_get_name (m));
     }
+
   return TRUE;
 }
