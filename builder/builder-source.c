@@ -32,6 +32,7 @@
 #include "builder-source-archive.h"
 #include "builder-source-patch.h"
 #include "builder-source-git.h"
+#include "builder-source-bzr.h"
 #include "builder-source-file.h"
 
 static void serializable_iface_init (JsonSerializableIface *serializable_iface);
@@ -157,12 +158,14 @@ builder_source_from_json (JsonNode *node)
 
   if (strcmp (type, "archive") == 0)
     return (BuilderSource *)json_gobject_deserialize (BUILDER_TYPE_SOURCE_ARCHIVE, node);
-  if (strcmp (type, "git") == 0)
-    return (BuilderSource *)json_gobject_deserialize (BUILDER_TYPE_SOURCE_GIT, node);
   if (strcmp (type, "file") == 0)
     return (BuilderSource *)json_gobject_deserialize (BUILDER_TYPE_SOURCE_FILE, node);
   if (strcmp (type, "patch") == 0)
     return (BuilderSource *)json_gobject_deserialize (BUILDER_TYPE_SOURCE_PATCH, node);
+  if (strcmp (type, "git") == 0)
+    return (BuilderSource *)json_gobject_deserialize (BUILDER_TYPE_SOURCE_GIT, node);
+  if (strcmp (type, "bzr") == 0)
+    return (BuilderSource *)json_gobject_deserialize (BUILDER_TYPE_SOURCE_BZR, node);
   else if (type == NULL)
     g_warning ("Missing source type");
   else
