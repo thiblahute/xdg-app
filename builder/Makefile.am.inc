@@ -12,8 +12,8 @@ xdg_app_builder_SOURCES = \
 	builder/builder-module.h \
 	builder/builder-source.c \
 	builder/builder-source.h \
-	builder/builder-source-tar.c \
-	builder/builder-source-tar.h \
+	builder/builder-source-archive.c \
+	builder/builder-source-archive.h \
 	builder/builder-source-git.c \
 	builder/builder-source-git.h \
 	builder/builder-source-file.c \

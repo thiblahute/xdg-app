@@ -1,4 +1,4 @@
-/* builder-source-tar.c
+/* builder-source-archive.c
  *
  * Copyright (C) 2015 Red Hat, Inc
  *
@@ -30,9 +30,9 @@
 #include "xdg-app-utils.h"
 
 #include "builder-utils.h"
-#include "builder-source-tar.h"
+#include "builder-source-archive.h"
 
-struct BuilderSourceTar {
+struct BuilderSourceArchive {
   BuilderSource parent;
 
   char *url;
@@ -42,9 +42,9 @@ struct BuilderSourceTar {
 
 typedef struct {
   BuilderSourceClass parent_class;
-} BuilderSourceTarClass;
+} BuilderSourceArchiveClass;
 
-G_DEFINE_TYPE (BuilderSourceTar, builder_source_tar, BUILDER_TYPE_SOURCE);
+G_DEFINE_TYPE (BuilderSourceArchive, builder_source_archive, BUILDER_TYPE_SOURCE);
 
 enum {
   PROP_0,
@@ -55,23 +55,23 @@ enum {
 };
 
 static void
-builder_source_tar_finalize (GObject *object)
+builder_source_archive_finalize (GObject *object)
 {
-  BuilderSourceTar *self = (BuilderSourceTar *)object;
+  BuilderSourceArchive *self = (BuilderSourceArchive *)object;
 
   g_free (self->url);
   g_free (self->checksum);
 
-  G_OBJECT_CLASS (builder_source_tar_parent_class)->finalize (object);
+  G_OBJECT_CLASS (builder_source_archive_parent_class)->finalize (object);
 }
 
 static void
-builder_source_tar_get_property (GObject    *object,
-                                guint       prop_id,
-                                GValue     *value,
-                                GParamSpec *pspec)
+builder_source_archive_get_property (GObject    *object,
+                                     guint       prop_id,
+                                     GValue     *value,
+                                     GParamSpec *pspec)
 {
-  BuilderSourceTar *self = BUILDER_SOURCE_TAR (object);
+  BuilderSourceArchive *self = BUILDER_SOURCE_ARCHIVE (object);
 
   switch (prop_id)
     {
@@ -93,12 +93,12 @@ builder_source_tar_get_property (GObject    *object,
 }
 
 static void
-builder_source_tar_set_property (GObject      *object,
-                                 guint         prop_id,
-                                 const GValue *value,
-                                 GParamSpec   *pspec)
+builder_source_archive_set_property (GObject      *object,
+                                     guint         prop_id,
+                                     const GValue *value,
+                                     GParamSpec   *pspec)
 {
-  BuilderSourceTar *self = BUILDER_SOURCE_TAR (object);
+  BuilderSourceArchive *self = BUILDER_SOURCE_ARCHIVE (object);
 
   switch (prop_id)
     {
@@ -122,7 +122,7 @@ builder_source_tar_set_property (GObject      *object,
 }
 
 static SoupURI *
-get_uri (BuilderSourceTar *self,
+get_uri (BuilderSourceArchive *self,
          GError **error)
 {
   SoupURI *uri;
@@ -143,7 +143,7 @@ get_uri (BuilderSourceTar *self,
 }
 
 static GFile *
-get_download_location (BuilderSourceTar *self,
+get_download_location (BuilderSourceArchive *self,
                        BuilderContext *context,
                        GError **error)
 {
@@ -176,11 +176,11 @@ get_download_location (BuilderSourceTar *self,
 }
 
 static gboolean
-builder_source_tar_download (BuilderSource *source,
-                             BuilderContext *context,
-                             GError **error)
+builder_source_archive_download (BuilderSource *source,
+                                 BuilderContext *context,
+                                 GError **error)
 {
-  BuilderSourceTar *self = BUILDER_SOURCE_TAR (source);
+  BuilderSourceArchive *self = BUILDER_SOURCE_ARCHIVE (source);
   g_autoptr (GFile) file = NULL;
   g_autoptr (GFile) dir = NULL;
   g_autoptr(SoupURI) uri = NULL;
@@ -306,34 +306,34 @@ tar (GFile *dir,
 }
 
 static gboolean
-builder_source_tar_extract (BuilderSource *source,
-                            GFile *dest,
-                            BuilderContext *context,
-                            GError **error)
+builder_source_archive_extract (BuilderSource *source,
+                                GFile *dest,
+                                BuilderContext *context,
+                                GError **error)
 {
-  BuilderSourceTar *self = BUILDER_SOURCE_TAR (source);
-  g_autoptr(GFile) tarfile = NULL;
-  g_autofree char *tar_path = NULL;
+  BuilderSourceArchive *self = BUILDER_SOURCE_ARCHIVE (source);
+  g_autoptr(GFile) archivefile = NULL;
+  g_autofree char *archive_path = NULL;
   g_autofree char *strip_components = NULL;
 
-  tarfile = get_download_location (self, context, error);
-  if (tarfile == NULL)
+  archivefile = get_download_location (self, context, error);
+  if (archivefile == NULL)
     return FALSE;
 
   strip_components = g_strdup_printf ("--strip-components=%u", self->strip_components);
-  tar_path = g_file_get_path (tarfile);
-  if (!tar (dest, error, "xf", tar_path, strip_components, NULL))
+  archive_path = g_file_get_path (archivefile);
+  if (!tar (dest, error, "xf", archive_path, strip_components, NULL))
     return FALSE;
 
   return TRUE;
 }
 
 static void
-builder_source_tar_checksum (BuilderSource  *source,
-                             GChecksum      *checksum,
-                             BuilderContext *context)
+builder_source_archive_checksum (BuilderSource  *source,
+                                 GChecksum      *checksum,
+                                 BuilderContext *context)
 {
-  BuilderSourceTar *self = BUILDER_SOURCE_TAR (source);
+  BuilderSourceArchive *self = BUILDER_SOURCE_ARCHIVE (source);
 
   builder_checksum_str (checksum, self->url);
   builder_checksum_str (checksum, self->checksum);
@@ -342,18 +342,18 @@ builder_source_tar_checksum (BuilderSource  *source,
 
 
 static void
-builder_source_tar_class_init (BuilderSourceTarClass *klass)
+builder_source_archive_class_init (BuilderSourceArchiveClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
   BuilderSourceClass *source_class = BUILDER_SOURCE_CLASS (klass);
 
-  object_class->finalize = builder_source_tar_finalize;
-  object_class->get_property = builder_source_tar_get_property;
-  object_class->set_property = builder_source_tar_set_property;
+  object_class->finalize = builder_source_archive_finalize;
+  object_class->get_property = builder_source_archive_get_property;
+  object_class->set_property = builder_source_archive_set_property;
 
-  source_class->download = builder_source_tar_download;
-  source_class->extract = builder_source_tar_extract;
-  source_class->checksum = builder_source_tar_checksum;
+  source_class->download = builder_source_archive_download;
+  source_class->extract = builder_source_archive_extract;
+  source_class->checksum = builder_source_archive_checksum;
 
   g_object_class_install_property (object_class,
                                    PROP_URL,
@@ -380,7 +380,7 @@ builder_source_tar_class_init (BuilderSourceTarClass *klass)
 }
 
 static void
-builder_source_tar_init (BuilderSourceTar *self)
+builder_source_archive_init (BuilderSourceArchive *self)
 {
   self->strip_components = 1;
 }

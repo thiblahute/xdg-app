@@ -29,7 +29,7 @@
 
 #include "builder-utils.h"
 #include "builder-source.h"
-#include "builder-source-tar.h"
+#include "builder-source-archive.h"
 #include "builder-source-patch.h"
 #include "builder-source-git.h"
 #include "builder-source-file.h"
@@ -155,8 +155,8 @@ builder_source_from_json (JsonNode *node)
 
   type = json_object_get_string_member  (object, "type");
 
-  if (strcmp (type, "tar") == 0)
-    return (BuilderSource *)json_gobject_deserialize (BUILDER_TYPE_SOURCE_TAR, node);
+  if (strcmp (type, "archive") == 0)
+    return (BuilderSource *)json_gobject_deserialize (BUILDER_TYPE_SOURCE_ARCHIVE, node);
   if (strcmp (type, "git") == 0)
     return (BuilderSource *)json_gobject_deserialize (BUILDER_TYPE_SOURCE_GIT, node);
   if (strcmp (type, "file") == 0)
