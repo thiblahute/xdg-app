@@ -348,6 +348,56 @@ builder_cache_commit (BuilderCache  *self,
   return res;
 }
 
+GPtrArray *
+builder_cache_get_changes (BuilderCache  *self,
+                           GError       **error)
+{
+  g_autoptr(GPtrArray) added = g_ptr_array_new_with_free_func (g_object_unref);
+  g_autoptr(GPtrArray) added_paths = g_ptr_array_new_with_free_func (g_free);
+  g_autoptr(GFile) current_root = NULL;
+  g_autoptr(GFile) current_files = NULL;
+  g_autoptr(GFile) parent_root = NULL;
+  g_autoptr(GFile) parent_files = NULL;
+  g_autoptr(GVariant) variant = NULL;
+  g_autoptr(GHashTable) owned = NULL;
+  g_autofree char *parent_commit = NULL;
+  int i;
+
+  if (!ostree_repo_read_commit (self->repo, self->last_parent, &current_root, NULL, NULL, error))
+    return NULL;
+
+  current_files = g_file_get_child (current_root, "files");
+
+  if (!ostree_repo_load_variant (self->repo, OSTREE_OBJECT_TYPE_COMMIT, self->last_parent,
+                                 &variant, NULL))
+    return NULL;
+
+  parent_commit = ostree_commit_get_parent (variant);
+  if (parent_commit != NULL)
+    {
+      if (!ostree_repo_read_commit (self->repo, parent_commit, &parent_root, NULL, NULL, error))
+        return FALSE;
+      parent_files = g_file_get_child (parent_root, "files");
+    }
+
+  if (!ostree_diff_dirs (OSTREE_DIFF_FLAGS_NONE,
+                         parent_files,
+                         current_files,
+                         NULL,
+                         NULL,
+                         added,
+                         NULL, error))
+    return NULL;
+
+  for (i = 0; i < added->len; i++)
+    {
+      char *path = g_file_get_relative_path (current_files, g_ptr_array_index (added, i));
+      g_ptr_array_add (added_paths, path);
+    }
+
+  return g_steal_pointer (&added_paths);
+}
+
 void
 builder_cache_disable_lookups (BuilderCache  *self)
 {

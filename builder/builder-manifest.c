@@ -38,6 +38,7 @@ struct BuilderManifest {
   char *runtime;
   char *runtime_version;
   char *sdk;
+  char **cleanup;
   BuilderOptions *build_options;
   GList *modules;
 };
@@ -60,6 +61,7 @@ enum {
   PROP_SDK,
   PROP_BUILD_OPTIONS,
   PROP_MODULES,
+  PROP_CLEANUP,
   LAST_PROP
 };
 
@@ -76,6 +78,7 @@ builder_manifest_finalize (GObject *object)
   g_free (self->sdk);
   g_clear_object (&self->build_options);
   g_list_free_full (self->modules, g_object_unref);
+  g_strfreev (self->cleanup);
 
   G_OBJECT_CLASS (builder_manifest_parent_class)->finalize (object);
 }
@@ -118,6 +121,10 @@ builder_manifest_get_property (GObject    *object,
       g_value_set_pointer (value, self->modules);
       break;
 
+    case PROP_CLEANUP:
+      g_value_set_boxed (value, self->cleanup);
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
     }
@@ -130,6 +137,7 @@ builder_manifest_set_property (GObject       *object,
                                GParamSpec   *pspec)
 {
   BuilderManifest *self = BUILDER_MANIFEST (object);
+  gchar **tmp;
 
   switch (prop_id)
     {
@@ -166,6 +174,12 @@ builder_manifest_set_property (GObject       *object,
       g_list_free_full (self->modules, g_object_unref);
       /* NOTE: This takes ownership of the list! */
       self->modules = g_value_get_pointer (value);
+      break;
+
+    case PROP_CLEANUP:
+      tmp = self->cleanup;
+      self->cleanup = g_strdupv (g_value_get_boxed (value));
+      g_strfreev (tmp);
       break;
 
     default:
@@ -230,6 +244,13 @@ builder_manifest_class_init (BuilderManifestClass *klass)
                                                          "",
                                                          "",
                                                          G_PARAM_READWRITE));
+  g_object_class_install_property (object_class,
+                                   PROP_CLEANUP,
+                                   g_param_spec_boxed ("cleanup",
+                                                       "",
+                                                       "",
+                                                       G_TYPE_STRV,
+                                                       G_PARAM_READWRITE));
 }
 
 static void
@@ -390,6 +411,24 @@ builder_manifest_checksum (BuilderManifest *self,
     builder_options_checksum (self->build_options, checksum, context);
 }
 
+void
+builder_manifest_checksum_cleanup (BuilderManifest *self,
+                                   GChecksum *checksum,
+                                   BuilderContext *context)
+{
+  GList *l;
+
+  builder_checksum_str (checksum, BUILDER_MANIFEST_CHECKSUM_VERSION);
+  builder_checksum_strv (checksum, self->cleanup);
+
+  for (l = self->modules; l != NULL; l = l->next)
+    {
+      BuilderModule *m = l->data;
+      builder_module_checksum_cleanup (m, checksum, context);
+    }
+
+}
+
 gboolean
 builder_manifest_download (BuilderManifest *self,
                            BuilderContext *context,
@@ -411,7 +450,7 @@ builder_manifest_download (BuilderManifest *self,
 
 gboolean
 builder_manifest_build (BuilderManifest *self,
-                        BuilderCache     *cache,
+                        BuilderCache *cache,
                         BuilderContext *context,
                         GError **error)
 {
@@ -423,6 +462,7 @@ builder_manifest_build (BuilderManifest *self,
   for (l = self->modules; l != NULL; l = l->next)
     {
       BuilderModule *m = l->data;
+      g_autoptr(GPtrArray) changes = NULL;
 
       builder_module_checksum (m, builder_cache_get_checksum (cache), context);
 
@@ -438,7 +478,74 @@ builder_manifest_build (BuilderManifest *self,
       else
         g_print ("Cache hit for %s, skipping build\n",
                  builder_module_get_name (m));
+
+      changes = builder_cache_get_changes (cache, error);
+      if (changes == NULL)
+        return FALSE;
+
+      builder_module_set_changes (m, changes);
     }
+
+  return TRUE;
+}
+
+static int
+cmpstringp (const void *p1, const void *p2)
+{
+  return strcmp (* (char * const *) p1, * (char * const *) p2);
+}
+
+gboolean
+builder_manifest_cleanup (BuilderManifest *self,
+                          BuilderCache *cache,
+                          BuilderContext *context,
+                          GError **error)
+{
+  g_autoptr(GFile) app_root = NULL;
+  g_autoptr(GHashTable) to_remove_ht = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
+  GList *l;
+  g_autofree char **keys = NULL;
+  guint n_keys;
+  int i;
+
+  builder_manifest_checksum_cleanup (self, builder_cache_get_checksum (cache), context);
+  if (!builder_cache_lookup (cache))
+    {
+      app_root = g_file_get_child (builder_context_get_app_dir (context), "files");
+
+      g_print ("Cleaning up\n");
+
+      for (l = self->modules; l != NULL; l = l->next)
+        {
+          BuilderModule *m = l->data;
+
+          builder_module_cleanup_collect (m, self->cleanup, to_remove_ht);
+        }
+
+      keys = (char **)g_hash_table_get_keys_as_array (to_remove_ht, &n_keys);
+
+      qsort (keys, n_keys, sizeof (char *), cmpstringp);
+      /* Iterate in reverse to remove leafs first */
+      for (i = n_keys - 1; i >= 0; i--)
+        {
+          g_autoptr(GError) my_error = NULL;
+          g_autoptr(GFile) f = g_file_resolve_relative_path (app_root, keys[i]);
+          if (!g_file_delete (f, NULL, &my_error))
+            {
+              if (!g_error_matches (my_error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND) &&
+                  !g_error_matches (my_error, G_IO_ERROR, G_IO_ERROR_NOT_EMPTY))
+                {
+                  g_propagate_error (error, g_steal_pointer (&my_error));
+                  return FALSE;
+                }
+            }
+        }
+
+      if (!builder_cache_commit (cache, "Cleanup", error))
+        return FALSE;
+    }
+  else
+    g_print ("Cache hit for cleanup, skipping\n");
 
   return TRUE;
 }

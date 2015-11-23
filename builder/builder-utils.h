@@ -34,6 +34,9 @@ void builder_checksum_strv (GChecksum *checksum, char **strv);
 void builder_checksum_boolean (GChecksum *checksum, gboolean val);
 void builder_checksum_uint32 (GChecksum *checksum, guint32 val);
 
+const char *path_prefix_match (const char *pattern,
+                               const char *string);
+
 G_END_DECLS
 
 #endif /* __BUILDER_UTILS_H__ */

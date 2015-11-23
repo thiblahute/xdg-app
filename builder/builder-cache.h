@@ -44,6 +44,8 @@ gboolean      builder_cache_lookup          (BuilderCache  *self);
 gboolean      builder_cache_commit          (BuilderCache  *self,
                                              const char    *body,
                                              GError       **error);
+GPtrArray   *builder_cache_get_changes      (BuilderCache  *self,
+                                             GError       **error);
 gboolean      builder_gc                    (BuilderCache  *self,
                                              GError       **error);
 

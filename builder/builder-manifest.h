@@ -57,6 +57,10 @@ gboolean        builder_manifest_build             (BuilderManifest  *self,
 void            builder_manifest_checksum          (BuilderManifest *self,
                                                     GChecksum *checksum,
                                                     BuilderContext *context);
+gboolean        builder_manifest_cleanup           (BuilderManifest *self,
+                                                    BuilderCache    *cache,
+                                                    BuilderContext *context,
+                                                    GError          **error);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(BuilderManifest, g_object_unref)
 

@@ -197,6 +197,12 @@ main (int    argc,
       return 1;
     }
 
+  if (!builder_manifest_cleanup (manifest, cache, build_context, &error))
+    {
+      g_print ("error: %s\n", error->message);
+      return 1;
+    }
+
   if (!builder_gc (cache, &error))
     {
       g_warning ("Failed to GC build cache: %s\n", error->message);

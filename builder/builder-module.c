@@ -44,6 +44,8 @@ struct BuilderModule {
   gboolean rm_configure;
   gboolean no_autogen;
   BuilderOptions *build_options;
+  GPtrArray *changes;
+  char **cleanup;
   GList *sources;
 };
 
@@ -66,6 +68,7 @@ enum {
   PROP_MAKE_INSTALL_ARGS,
   PROP_SOURCES,
   PROP_BUILD_OPTIONS,
+  PROP_CLEANUP,
   LAST_PROP
 };
 
@@ -81,6 +84,9 @@ builder_module_finalize (GObject *object)
   g_strfreev (self->make_install_args);
   g_clear_object (&self->build_options);
   g_list_free_full (self->sources, g_object_unref);
+  g_strfreev (self->cleanup);
+
+  g_ptr_array_unref (self->changes);
 
   G_OBJECT_CLASS (builder_module_parent_class)->finalize (object);
 }
@@ -125,6 +131,10 @@ builder_module_get_property (GObject    *object,
 
     case PROP_SOURCES:
       g_value_set_pointer (value, self->sources);
+      break;
+
+    case PROP_CLEANUP:
+      g_value_set_boxed (value, self->cleanup);
       break;
 
     default:
@@ -182,6 +192,12 @@ builder_module_set_property (GObject      *object,
       g_list_free_full (self->sources, g_object_unref);
       /* NOTE: This takes ownership of the list! */
       self->sources = g_value_get_pointer (value);
+      break;
+
+    case PROP_CLEANUP:
+      tmp = self->cleanup;
+      self->cleanup = g_strdupv (g_value_get_boxed (value));
+      g_strfreev (tmp);
       break;
 
    default:
@@ -253,6 +269,13 @@ builder_module_class_init (BuilderModuleClass *klass)
                                                         "",
                                                         BUILDER_TYPE_OPTIONS,
                                                         G_PARAM_READWRITE));
+  g_object_class_install_property (object_class,
+                                   PROP_CLEANUP,
+                                   g_param_spec_boxed ("cleanup",
+                                                       "",
+                                                       "",
+                                                       G_TYPE_STRV,
+                                                       G_PARAM_READWRITE));
 }
 
 static void
@@ -634,5 +657,106 @@ builder_module_checksum (BuilderModule  *self,
       BuilderSource *source = l->data;
 
       builder_source_checksum (source, checksum, context);
+    }
+}
+
+void
+builder_module_checksum_cleanup (BuilderModule  *self,
+                                 GChecksum      *checksum,
+                                 BuilderContext *context)
+{
+  builder_checksum_str (checksum, BUILDER_MODULE_CHECKSUM_VERSION);
+  builder_checksum_str (checksum, self->name);
+  builder_checksum_strv (checksum, self->cleanup);
+}
+
+GPtrArray *
+builder_module_get_changes (BuilderModule  *self)
+{
+  return self->changes;
+}
+
+void
+builder_module_set_changes (BuilderModule  *self,
+                            GPtrArray      *changes)
+{
+  if (self->changes != changes)
+    {
+      if (self->changes)
+        g_ptr_array_unref (self->changes);
+      self->changes = g_ptr_array_ref (changes);
+    }
+}
+
+static void
+collect_for_pattern (BuilderModule *self,
+                     const char *pattern,
+                     const char *path,
+                     GHashTable *to_remove_ht)
+{
+  const char *rest;
+  const char *last_slash;
+  g_autofree char *dir = NULL;
+
+  if (pattern[0] == '/')
+    {
+      /* Absolute path match */
+      rest = path_prefix_match (pattern+1, path);
+    }
+  else
+    {
+      /* Basename match */
+      last_slash = strrchr (path, '/');
+      if (last_slash)
+        {
+          dir = g_strndup (path, last_slash - path);
+          path = last_slash + 1;
+        }
+      rest = path_prefix_match (pattern, path);
+    }
+
+  while (rest != NULL)
+    {
+      const char *slash;
+      g_autofree char *prefix = g_strndup (path, rest-path);
+      g_autofree char *to_remove = NULL;
+      if (dir)
+        to_remove = g_strconcat (dir, "/", prefix, NULL);
+      else
+        to_remove = g_strdup (prefix);
+      g_hash_table_insert (to_remove_ht, g_steal_pointer (&to_remove), GINT_TO_POINTER (1));
+      while (*rest == '/')
+        rest++;
+      if (*rest == 0)
+        break;
+      slash = strchr (rest, '/');
+      rest = slash ? slash : rest + strlen (rest);
+    }
+}
+
+void
+builder_module_cleanup_collect (BuilderModule *self,
+                                char **global_patterns,
+                                GHashTable *to_remove_ht)
+{
+  GPtrArray *changed_files;
+  int i, j;
+
+  changed_files = self->changes;
+  for (i = 0; i < changed_files->len; i++)
+    {
+      const char *path = g_ptr_array_index (changed_files, i);
+
+      if (global_patterns)
+        {
+          for (j = 0; global_patterns[j] != NULL; j++)
+            collect_for_pattern (self, global_patterns[j], path, to_remove_ht);
+        }
+
+      if (self->cleanup)
+        {
+          for (j = 0; self->cleanup[j] != NULL; j++)
+            collect_for_pattern (self, self->cleanup[j], path, to_remove_ht);
+        }
     }
 }

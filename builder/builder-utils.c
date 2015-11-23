@@ -101,3 +101,69 @@ builder_checksum_uint32 (GChecksum *checksum,
   v[3] = (val >> 24) & 0xff;
   g_checksum_update (checksum, v, 4);
 }
+
+/* Returns end of matching path prefix, or NULL if no match */
+const char *
+path_prefix_match (const char *pattern,
+                   const char *string)
+{
+  char c, test;
+  const char *tmp;
+
+  while (TRUE)
+    {
+      switch (c = *pattern++)
+        {
+        case 0:
+          if (*string == '/' || *string == 0)
+            return string;
+          return NULL;
+
+        case '?':
+          if (*string == '/' || *string == 0)
+            return NULL;
+          string++;
+          break;
+
+        case '*':
+          c = *pattern;
+
+          while (c == '*')
+            c = *++pattern;
+
+          /* special case * at end */
+          if (c == 0)
+            {
+              char *tmp = strchr (string, '/');
+              if (tmp != NULL)
+                return tmp;
+              return string + strlen (string);
+            }
+          else if (c == '/')
+            {
+              string = strchr (string, '/');
+              if (string == NULL)
+                return NULL;
+              break;
+            }
+
+          while ((test = *string) != 0)
+            {
+              tmp = path_prefix_match (pattern, string);
+              if (tmp != NULL)
+                return tmp;
+              if (test == '/')
+                break;
+              string++;
+            }
+          return NULL;
+
+        default:
+          if (c != *string)
+            return NULL;
+          string++;
+          break;
+        }
+    }
+  return NULL; /* Should not be reached */
+}

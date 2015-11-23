@@ -41,6 +41,9 @@ GType builder_module_get_type (void);
 
 const char * builder_module_get_name    (BuilderModule  *self);
 GList *      builder_module_get_sources (BuilderModule  *self);
+GPtrArray *  builder_module_get_changes (BuilderModule  *self);
+void         builder_module_set_changes (BuilderModule  *self,
+                                         GPtrArray      *changes);
 
 gboolean builder_module_download_sources (BuilderModule   *self,
                                           BuilderContext  *context,
@@ -56,6 +59,13 @@ gboolean builder_module_build            (BuilderModule   *self,
 void     builder_module_checksum         (BuilderModule  *self,
                                           GChecksum      *checksum,
                                           BuilderContext *context);
+void     builder_module_checksum_cleanup (BuilderModule  *self,
+                                          GChecksum      *checksum,
+                                          BuilderContext *context);
+void     builder_module_cleanup_collect  (BuilderModule  *self,
+                                          char **global_patterns,
+                                          GHashTable *to_remove_ht);
+
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(BuilderModule, g_object_unref)
 
