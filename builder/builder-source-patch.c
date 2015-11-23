@@ -114,15 +114,13 @@ get_source_file (BuilderSourcePatch *self,
                  BuilderContext *context,
                  GError **error)
 {
-  g_autoptr(GFile) base_dir = builder_context_get_base_dir (context);
-
   if (self->path == NULL || self->path[0] == 0)
     {
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "path not specified");
       return NULL;
     }
 
-  return g_file_resolve_relative_path (base_dir, self->path);
+  return g_file_resolve_relative_path (builder_context_get_base_dir (context), self->path);
 }
 
 static gboolean

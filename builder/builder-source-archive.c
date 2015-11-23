@@ -194,7 +194,7 @@ get_download_location (BuilderSourceArchive *self,
   g_autoptr(SoupURI) uri = NULL;
   const char *path;
   g_autofree char *base_name = NULL;
-  g_autoptr(GFile) download_dir = NULL;
+  GFile *download_dir = NULL;
   g_autoptr(GFile) sha256_dir = NULL;
   g_autoptr(GFile) file = NULL;
 

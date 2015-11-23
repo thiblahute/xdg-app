@@ -248,13 +248,12 @@ git (GFile        *dir,
 static GFile *
 get_mirror_dir (BuilderSourceGit *self, BuilderContext *context)
 {
-  g_autoptr(GFile) download_dir = NULL;
   g_autoptr(GFile) git_dir = NULL;
   g_autofree char *filename = NULL;
   g_autofree char *git_dir_path = NULL;
 
-  download_dir = builder_context_get_download_dir (context);
-  git_dir = g_file_get_child (download_dir, "git");
+  git_dir = g_file_get_child (builder_context_get_state_dir (context),
+                              "git");
 
   git_dir_path = g_file_get_path (git_dir);
   g_mkdir_with_parents (git_dir_path, 0755);

@@ -38,6 +38,10 @@ struct BuilderContext {
   SoupSession *soup_session;
   char *arch;
 
+  GFile *download_dir;
+  GFile *state_dir;
+  GFile *cache_dir;
+
   BuilderOptions *options;
 };
 
@@ -116,10 +120,21 @@ builder_context_set_property (GObject      *object,
 }
 
 static void
+builder_context_constructed (GObject *object)
+{
+  BuilderContext *self = BUILDER_CONTEXT (object);
+
+  self->state_dir = g_file_get_child (self->base_dir, ".xdg-app-builder");
+  self->download_dir = g_file_get_child (self->state_dir, "downloads");
+  self->cache_dir = g_file_get_child (self->state_dir, "build-cache");
+}
+
+static void
 builder_context_class_init (BuilderContextClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
+  object_class->constructed = builder_context_constructed;
   object_class->finalize = builder_context_finalize;
   object_class->get_property = builder_context_get_property;
   object_class->set_property = builder_context_set_property;
@@ -148,19 +163,31 @@ builder_context_init (BuilderContext *self)
 GFile *
 builder_context_get_base_dir (BuilderContext  *self)
 {
-  return g_object_ref (self->base_dir);
+  return self->base_dir;
+}
+
+GFile *
+builder_context_get_state_dir (BuilderContext  *self)
+{
+  return self->state_dir;
 }
 
 GFile *
 builder_context_get_app_dir (BuilderContext  *self)
 {
-  return g_object_ref (self->app_dir);
+  return self->app_dir;
 }
 
 GFile *
 builder_context_get_download_dir (BuilderContext  *self)
 {
-  return g_file_get_child (self->base_dir, "downloads");
+  return self->download_dir;
+}
+
+GFile *
+builder_context_get_cache_dir (BuilderContext  *self)
+{
+  return self->cache_dir;
 }
 
 SoupSession *

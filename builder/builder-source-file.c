@@ -114,7 +114,7 @@ get_source_file (BuilderSourceFile *self,
                  BuilderContext *context,
                  GError **error)
 {
-  g_autoptr(GFile) base_dir = builder_context_get_base_dir (context);
+  GFile *base_dir = builder_context_get_base_dir (context);
 
   if (self->path == NULL || self->path[0] == 0)
     {

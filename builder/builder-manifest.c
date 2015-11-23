@@ -327,7 +327,7 @@ builder_manifest_init_app_dir (BuilderManifest *self,
                                BuilderContext *context,
                                GError **error)
 {
-  g_autoptr(GFile) app_dir = builder_context_get_app_dir (context);
+  GFile *app_dir = builder_context_get_app_dir (context);
   g_autofree char *app_dir_path = g_file_get_path (app_dir);
   g_autoptr(GSubprocessLauncher) launcher = NULL;
   g_autoptr(GSubprocess) subp = NULL;

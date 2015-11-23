@@ -81,7 +81,6 @@ main (int    argc,
   g_autoptr(BuilderContext) build_context = NULL;
   g_autoptr(GFile) base_dir = NULL;
   g_autoptr(GFile) app_dir = NULL;
-  g_autoptr(GFile) cache_dir = NULL;
   g_autoptr(BuilderCache) cache = NULL;
   g_autofree char *cache_branch = NULL;
 
@@ -158,10 +157,9 @@ main (int    argc,
   if (opt_download_only)
     return 0;
 
-  cache_dir = g_file_get_child (base_dir, ".buildcache");
   cache_branch = g_path_get_basename (manifest_path);
 
-  cache = builder_cache_new (cache_dir, app_dir, cache_branch);
+  cache = builder_cache_new (builder_context_get_cache_dir (build_context), app_dir, cache_branch);
   if (!builder_cache_open (cache, &error))
     {
       g_print ("Error opening cache: %s\n", error->message);

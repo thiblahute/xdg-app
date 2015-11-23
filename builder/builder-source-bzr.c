@@ -236,13 +236,12 @@ bzr (GFile        *dir,
 static GFile *
 get_mirror_dir (BuilderSourceBzr *self, BuilderContext *context)
 {
-  g_autoptr(GFile) download_dir = NULL;
   g_autoptr(GFile) bzr_dir = NULL;
   g_autofree char *filename = NULL;
   g_autofree char *bzr_dir_path = NULL;
 
-  download_dir = builder_context_get_download_dir (context);
-  bzr_dir = g_file_get_child (download_dir, "bzr");
+  bzr_dir = g_file_get_child (builder_context_get_state_dir (context),
+                              "bzr");
 
   bzr_dir_path = g_file_get_path (bzr_dir);
   g_mkdir_with_parents (bzr_dir_path, 0755);

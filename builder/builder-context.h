@@ -37,6 +37,8 @@ GType builder_context_get_type (void);
 
 GFile *         builder_context_get_app_dir      (BuilderContext *self);
 GFile *         builder_context_get_base_dir     (BuilderContext *self);
+GFile *         builder_context_get_state_dir    (BuilderContext *self);
+GFile *         builder_context_get_cache_dir    (BuilderContext *self);
 GFile *         builder_context_get_download_dir (BuilderContext *self);
 SoupSession *   builder_context_get_soup_session (BuilderContext *self);
 const char *    builder_context_get_arch         (BuilderContext *self);

@@ -450,8 +450,7 @@ builder_module_build (BuilderModule *self,
                       BuilderContext *context,
                       GError **error)
 {
-  g_autoptr(GFile) app_dir = builder_context_get_app_dir (context);
-  g_autoptr(GFile) base_dir = builder_context_get_base_dir (context);
+  GFile *app_dir = builder_context_get_app_dir (context);
   g_autofree char *make_j = NULL;
   g_autofree char *make_l = NULL;
   g_autofree char *makefile_content = NULL;
@@ -472,7 +471,8 @@ builder_module_build (BuilderModule *self,
 
   buildname = g_strdup_printf ("build-%s-XXXXXX", self->name);
 
-  source_dir_template = g_file_get_child (base_dir, buildname);
+  source_dir_template = g_file_get_child (builder_context_get_state_dir (context),
+                                          buildname);
   source_dir_path = g_file_get_path (source_dir_template);;
 
   if (g_mkdtemp (source_dir_path) == NULL)
