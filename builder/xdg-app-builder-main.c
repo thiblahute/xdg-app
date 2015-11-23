@@ -34,11 +34,15 @@
 static gboolean opt_verbose;
 static gboolean opt_version;
 static gboolean opt_disable_cache;
+static gboolean opt_download_only;
+static gboolean opt_disable_download;
 
 static GOptionEntry entries[] = {
   { "verbose", 'v', 0, G_OPTION_ARG_NONE, &opt_verbose, "Print debug information during command processing", NULL },
   { "version", 0, 0, G_OPTION_ARG_NONE, &opt_version, "Print version information and exit", NULL },
   { "disable-cache", 0, 0, G_OPTION_ARG_NONE, &opt_disable_cache, "Disable cache", NULL },
+  { "disable-download", 0, 0, G_OPTION_ARG_NONE, &opt_disable_download, "Don't download any new sources", NULL },
+  { "download-only", 0, 0, G_OPTION_ARG_NONE, &opt_download_only, "Only download sources, don't build", NULL },
   { NULL }
 };
 
@@ -142,11 +146,17 @@ main (int    argc,
 
   build_context = builder_context_new (base_dir, app_dir);
 
-  if (!builder_manifest_download (manifest, build_context, &error))
+  if (!opt_disable_download)
     {
-      g_print ("error: %s\n", error->message);
-      return 1;
+      if (!builder_manifest_download (manifest, build_context, &error))
+        {
+          g_print ("error: %s\n", error->message);
+          return 1;
+        }
     }
+
+  if (opt_download_only)
+    return 0;
 
   cache_dir = g_file_get_child (base_dir, ".buildcache");
   cache_branch = g_path_get_basename (manifest_path);
