@@ -41,6 +41,7 @@ struct BuilderModule {
   char **config_opts;
   char **make_args;
   char **make_install_args;
+  char **xdg_app_opts;
   gboolean rm_configure;
   gboolean no_autogen;
   BuilderOptions *build_options;
@@ -69,6 +70,7 @@ enum {
   PROP_SOURCES,
   PROP_BUILD_OPTIONS,
   PROP_CLEANUP,
+  XDG_APP_OPTS,
   LAST_PROP
 };
 
@@ -85,6 +87,7 @@ builder_module_finalize (GObject *object)
   g_clear_object (&self->build_options);
   g_list_free_full (self->sources, g_object_unref);
   g_strfreev (self->cleanup);
+  g_strfreev (self->xdg_app_opts);
 
   g_ptr_array_unref (self->changes);
 
@@ -111,6 +114,10 @@ builder_module_get_property (GObject    *object,
 
     case PROP_NO_AUTOGEN:
       g_value_set_boolean (value, self->no_autogen);
+      break;
+
+    case XDG_APP_OPTS:
+      g_value_set_boxed (value, self->xdg_app_opts);
       break;
 
     case PROP_CONFIG_OPTS:
@@ -184,6 +191,12 @@ builder_module_set_property (GObject      *object,
       g_strfreev (tmp);
       break;
 
+    case XDG_APP_OPTS:
+      tmp = self->xdg_app_opts;
+      self->xdg_app_opts = g_strdupv (g_value_get_boxed (value));
+      g_strfreev (tmp);
+      break;
+
     case PROP_BUILD_OPTIONS:
       g_set_object (&self->build_options,  g_value_get_object (value));
       break;
@@ -244,6 +257,13 @@ builder_module_class_init (BuilderModuleClass *klass)
   g_object_class_install_property (object_class,
                                    PROP_CONFIG_OPTS,
                                    g_param_spec_boxed ("config-opts",
+                                                       "",
+                                                       "",
+                                                       G_TYPE_STRV,
+                                                       G_PARAM_READWRITE));
+  g_object_class_install_property (object_class,
+                                   XDG_APP_OPTS,
+                                   g_param_spec_boxed ("xdg-app-opts",
                                                        "",
                                                        "",
                                                        G_TYPE_STRV,
@@ -404,6 +424,7 @@ static gboolean
 build (GFile *app_dir,
        GFile *source_dir,
        GFile *cwd_dir,
+       char **xdg_app_opts,
        char **env_vars,
        GError **error,
        const gchar            *argv1,
@@ -422,6 +443,13 @@ build (GFile *app_dir,
   args = g_ptr_array_new_with_free_func (g_free);
   g_ptr_array_add (args, g_strdup ("xdg-app"));
   g_ptr_array_add (args, g_strdup ("build"));
+
+  if (xdg_app_opts)
+    {
+      for (i = 0; xdg_app_opts[i] != NULL; i++)
+        g_ptr_array_add (args, g_strdup (xdg_app_opts[i]));
+    }
+
   if (env_vars)
     {
       for (i = 0; env_vars[i] != NULL; i++)
@@ -554,7 +582,7 @@ builder_module_build (BuilderModule *self,
         }
 
       env_with_noconfigure = g_environ_setenv (g_strdupv (env), "NOCONFIGURE", "1", TRUE);
-      if (!build (app_dir, source_dir, NULL, env_with_noconfigure, error,
+      if (!build (app_dir, source_dir, NULL, self->xdg_app_opts, env_with_noconfigure, error,
                   autogen_cmd, NULL))
         return FALSE;
 
@@ -589,7 +617,7 @@ builder_module_build (BuilderModule *self,
           configure_cmd = "./configure";
         }
 
-      if (!build (app_dir, source_dir, build_dir, env, error,
+      if (!build (app_dir, source_dir, build_dir, self->xdg_app_opts, env, error,
                   configure_cmd, "--prefix=/app", strv_arg, self->config_opts, NULL))
         return FALSE;
     }
@@ -623,11 +651,11 @@ builder_module_build (BuilderModule *self,
       make_l = g_strdup_printf ("-l%d", 2*builder_context_get_n_cpu (context));
     }
 
-  if (!build (app_dir, source_dir, build_dir, env, error,
+  if (!build (app_dir, source_dir, build_dir, self->xdg_app_opts, env, error,
               "make", "all", make_j?make_j:skip_arg, make_l?make_l:skip_arg, strv_arg, self->make_args, NULL))
     return FALSE;
 
-  if (!build (app_dir, source_dir, build_dir, env, error,
+  if (!build (app_dir, source_dir, build_dir, self->xdg_app_opts, env, error,
               "make", "install", strv_arg, self->make_install_args, NULL))
     return FALSE;
 
@@ -649,6 +677,7 @@ builder_module_checksum (BuilderModule  *self,
   builder_checksum_strv (checksum, self->config_opts);
   builder_checksum_strv (checksum, self->make_args);
   builder_checksum_strv (checksum, self->make_install_args);
+  builder_checksum_strv (checksum, self->xdg_app_opts);
   builder_checksum_boolean (checksum, self->rm_configure);
   builder_checksum_boolean (checksum, self->no_autogen);
 
